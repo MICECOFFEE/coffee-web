@@ -1,0 +1,3270 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>コーヒー販売量・焙煎管理アプリ</title>
+<style>
+  :root {
+    --bg: #faf8f5;
+    --surface: #ffffff;
+    --surface2: #f5f2ee;
+    --border: #e0d9d0;
+    --border2: #c8bfb2;
+    --text: #2c2416;
+    --text2: #6b5e4e;
+    --text3: #9e8e7a;
+    --accent: #6b3d1e;
+    --accent-light: #c4794a;
+    --accent-bg: #fdf3ec;
+    --green: #2e7d52;
+    --green-bg: #eaf5ef;
+    --red: #c0392b;
+    --red-bg: #fdecea;
+    --blue: #1a5a9a;
+    --blue-bg: #e8f2fb;
+    --amber: #b07d1a;
+    --amber-bg: #fdf5e0;
+    --shadow: 0 2px 8px rgba(44,36,22,0.08);
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; }
+  h1 { font-size: 20px; font-weight: 700; }
+  h2 { font-size: 16px; font-weight: 600; }
+  h3 { font-size: 14px; font-weight: 600; }
+  button { cursor: pointer; border: none; border-radius: var(--radius); font-family: inherit; font-size: 13px; transition: all 0.15s; }
+  input, select, textarea { font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; background: var(--surface); color: var(--text); outline: none; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent-light); box-shadow: 0 0 0 2px rgba(107,61,30,0.12); }
+  table { border-collapse: collapse; width: 100%; }
+  th { background: var(--surface2); font-weight: 600; font-size: 12px; color: var(--text2); padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  tr:hover td { background: var(--surface2); }
+
+  /* Layout */
+  #app { display: flex; min-height: 100vh; }
+  .sidebar { width: 200px; min-width: 200px; background: var(--accent); color: white; padding: 0; display: flex; flex-direction: column; }
+  .sidebar-logo { padding: 20px 16px 16px; border-bottom: 1px solid rgba(255,255,255,0.15); }
+  .sidebar-logo h1 { font-size: 14px; line-height: 1.4; color: white; }
+  .sidebar-logo p { font-size: 10px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+  .sidebar-nav { flex: 1; padding: 12px 0; }
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 10px 16px; color: rgba(255,255,255,0.75); cursor: pointer; font-size: 13px; transition: all 0.15s; }
+  .nav-item:hover { background: rgba(255,255,255,0.1); color: white; }
+  .nav-item.active { background: rgba(255,255,255,0.2); color: white; font-weight: 600; }
+  .nav-icon { font-size: 14px; width: 16px; text-align: center; }
+  .main { flex: 1; overflow: auto; }
+  .main-inner { padding: 24px; max-width: 1400px; }
+  .page-header { margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+  .page-title { font-size: 18px; font-weight: 700; color: var(--text); }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; }
+  .card + .card { margin-top: 16px; }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text2); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+
+  /* Buttons */
+  .btn { padding: 7px 14px; font-size: 13px; border-radius: var(--radius); font-weight: 500; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-light); }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid #f5c6c2; }
+  .btn-danger:hover { background: #f9d7d5; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-icon { padding: 5px 8px; font-size: 13px; background: var(--surface2); border: 1px solid var(--border); }
+  .btn-icon:hover { background: var(--border); }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: var(--green-bg); color: var(--green); }
+  .badge-amber { background: var(--amber-bg); color: var(--amber); }
+  .badge-red { background: var(--red-bg); color: var(--red); }
+  .badge-blue { background: var(--blue-bg); color: var(--blue); }
+  .badge-gray { background: var(--surface2); color: var(--text2); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .tab { padding: 8px 14px; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text2); transition: all 0.15s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab:hover { color: var(--text); }
+
+  /* Form */
+  .form-row { display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-end; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 12px; color: var(--text2); font-weight: 500; }
+  .form-group input, .form-group select { width: 100%; }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  /* Stat cards */
+  .stat-card { background: var(--surface2); border-radius: var(--radius); padding: 12px 16px; }
+  .stat-label { font-size: 11px; color: var(--text3); font-weight: 500; margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: 700; color: var(--text); }
+  .stat-unit { font-size: 13px; color: var(--text2); margin-left: 3px; }
+
+  /* Alert */
+  .alert { padding: 10px 14px; border-radius: var(--radius); font-size: 13px; margin-bottom: 12px; }
+  .alert-info { background: var(--blue-bg); color: var(--blue); border: 1px solid #b8d4f0; }
+  .alert-warning { background: var(--amber-bg); color: var(--amber); border: 1px solid #e8c97a; }
+  .alert-success { background: var(--green-bg); color: var(--green); border: 1px solid #a5d8be; }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .modal { background: var(--surface); border-radius: var(--radius-lg); padding: 24px; max-width: 600px; width: 90%; max-height: 85vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .modal-title { font-size: 16px; font-weight: 700; }
+  .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text2); padding: 2px 6px; }
+
+  /* Upload zone */
+  .upload-zone { border: 2px dashed var(--border2); border-radius: var(--radius-lg); padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .upload-zone:hover { border-color: var(--accent-light); background: var(--accent-bg); }
+  .upload-zone p { color: var(--text2); font-size: 13px; }
+
+  /* Table actions */
+  .table-actions { display: flex; gap: 6px; }
+
+  /* Print styles */
+  @media print {
+    .sidebar, .no-print { display: none !important; }
+    .main { width: 100%; overflow: visible; }
+    .main-inner { padding: 8px; max-width: none; }
+    body { background: white; font-size: 12pt; }
+    .card { border: 1px solid #999; box-shadow: none; break-inside: avoid; margin: 0; padding: 12px; }
+    .delivery-store-block { page-break-after: always; margin-bottom: 0; }
+    .delivery-store-block:last-child { page-break-after: avoid; }
+    .delivery-print-card { border: 1.5px solid #555 !important; }
+    .scroll-x { overflow: visible; }
+    h1, h2, h3 { font-size: 14pt; }
+    th { font-size: 11pt; padding: 6px 8px; }
+    td { font-size: 11pt; padding: 5px 8px; }
+    .badge { border: 1px solid #999; }
+    .stat-card, .alert { display: none; }
+    .tabs { display: none; }
+    .page-header { display: none; }
+    .mt-12 { margin-top: 6px; }
+  }
+  @media screen {
+    .print-only { display: none !important; }
+  }
+  @media print {
+    .print-only { display: block !important; }
+    .no-print { display: none !important; }
+  }
+
+  .scroll-x { overflow-x: auto; }
+  .text-right { text-align: right; }
+  .text-center { text-align: center; }
+  .flex { display: flex; }
+  .flex-col { flex-direction: column; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .gap-16 { gap: 16px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .mt-20 { margin-top: 20px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .fw-600 { font-weight: 600; }
+  .text-sm { font-size: 12px; color: var(--text2); }
+  .text-xs { font-size: 11px; color: var(--text3); }
+  .w-full { width: 100%; }
+  .highlight { background: var(--accent-bg); }
+
+  input[type="number"] { -moz-appearance: textfield; }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+  .drag-handle { cursor: grab; color: var(--text3); padding: 2px 4px; }
+  .drag-handle:active { cursor: grabbing; }
+</style>
+<style>
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#4A3728,#6B4C35);position:fixed;inset:0;z-index:9999;}
+.login-card{background:white;border-radius:16px;padding:48px 40px;text-align:center;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+.login-card h1{font-size:20px;font-weight:600;color:#3D2B1F;margin-bottom:8px;}
+.login-card p{font-size:14px;color:#888;margin-bottom:32px;line-height:1.6;}
+.btn-google{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:14px;border-radius:10px;border:1.5px solid #ddd;background:white;cursor:pointer;font-size:15px;font-weight:500;color:#1a1a1a;transition:all 0.2s;}
+.btn-google:hover{background:#f5f5f5;border-color:#bbb;}
+.btn-google img{width:20px;height:20px;}
+.fb-user-bar{background:#4A3728;color:white;padding:8px 16px;display:flex;align-items:center;justify-content:flex-end;gap:12px;font-size:13px;}
+.fb-logout-btn{padding:4px 12px;border-radius:99px;border:1px solid rgba(255,255,255,0.4);background:transparent;color:white;cursor:pointer;font-size:12px;}
+.fb-logout-btn:hover{background:rgba(255,255,255,0.15);}
+.fb-save-status{font-size:11px;opacity:0.75;}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <h1>☕ コーヒー販売量・焙煎管理</h1>
+    <p>Googleアカウントでログインすると<br>どのデバイスからでも利用できます</p>
+    <button class="btn-google" id="login-btn">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google"/>
+      Googleでログイン
+    </button>
+    <p style="color:#888;font-size:13px;margin-top:16px;display:none;" id="login-loading">ログイン中...</p>
+  </div>
+</div>
+
+<div id="app-body" style="display:none;">
+  <div class="fb-user-bar">
+    <span class="fb-save-status" id="fb-save-status"></span>
+    <span id="fb-user-name"></span>
+    <button class="fb-logout-btn" onclick="doSignOut()">ログアウト</button>
+  </div>
+  <div id="root"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+<script>
+
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ===== 定数 =====
+const DEFAULT_PRODUCTS = [
+  { id: 'p1', name: 'アイスブレンド', greenBeanName: 'アイスブレンド用生豆', limitedType: null },
+  { id: 'p2', name: 'ダークブレンド', greenBeanName: 'ダークブレンド用生豆', limitedType: null },
+  { id: 'p3', name: 'ブラジルブレンド', greenBeanName: 'ブラジルブレンド用生豆', limitedType: null },
+  { id: 'p4', name: 'ライトブレンド', greenBeanName: 'ライトブレンド用生豆', limitedType: null },
+  { id: 'p5', name: 'キリマンジャロ FAQAA', greenBeanName: 'キリマンジャロ FAQAA', limitedType: null },
+  { id: 'p6', name: 'コロンビア SUP', greenBeanName: 'コロンビア SUP', limitedType: null },
+  { id: 'p7', name: 'グアテマラ SHB', greenBeanName: 'グアテマラ SHB', limitedType: null },
+  { id: 'p8', name: '深煎りグアテマラ', greenBeanName: 'グアテマラ SHB', limitedType: null },
+  { id: 'p9', name: 'エチオピア・モカ', greenBeanName: 'エチオピア・モカ', limitedType: null },
+  { id: 'p10', name: 'イルガチェフェ・モカ G1W', greenBeanName: 'イルガチェフェ G1W', limitedType: null },
+  { id: 'p11', name: 'コスタリカレッドハニー', greenBeanName: 'コスタリカ レッドハニー', limitedType: null },
+  { id: 'p12', name: 'マンデリンG1', greenBeanName: 'マンデリン G1', limitedType: null },
+  { id: 'p13', name: 'コロンビア デカフェ', greenBeanName: 'コロンビア デカフェ', limitedType: null },
+  { id: 'p14', name: '深煎りブラジル', greenBeanName: 'ブラジル', limitedType: 'limited1', limitedLabel: '(期間限定深煎り①)' },
+  { id: 'p15', name: 'ブラジルファインストロベリー', greenBeanName: 'ブラジル ファインストロベリー', limitedType: 'limited2', limitedLabel: '(期間限定深煎り②)' },
+];
+
+const DEFAULT_STORES = [
+  { id: 's1', name: '1号車' },
+  { id: 's2', name: '2号車' },
+  { id: 's3', name: '3号車' },
+  { id: 's4', name: '4号車' },
+  { id: 's5', name: '5号車' },
+  { id: 's6', name: '6号車' },
+  { id: 's7', name: '7号車' },
+  { id: 's8', name: '8号車' },
+];
+
+const BAG_WEIGHT = 5000; // g
+const BATCH_BAGS = 4;
+const BATCH_WEIGHT = BATCH_BAGS * BAG_WEIGHT; // 20000g per batch
+
+function generateId() { return 'id_' + Math.random().toString(36).substr(2, 9); }
+
+// ===== ドラッグ&ドロップ対応ファイル選択ゾーン =====
+function DropZone({ onFile, accept, message, subMessage, status }) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
+
+  function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) onFile(file);
+  }
+  function handleDragOver(e) { e.preventDefault(); setDragging(true); }
+  function handleDragLeave(e) { e.preventDefault(); setDragging(false); }
+  function handleChange(e) {
+    const file = e.target.files?.[0];
+    if (file) onFile(file);
+    e.target.value = '';
+  }
+
+  return React.createElement('div', {
+    onClick: () => inputRef.current?.click(),
+    onDrop: handleDrop,
+    onDragOver: handleDragOver,
+    onDragLeave: handleDragLeave,
+    style: {
+      border: dragging ? '2px solid var(--accent-light)' : '2px dashed var(--border2)',
+      borderRadius: 'var(--radius-lg)',
+      padding: '28px 24px',
+      textAlign: 'center',
+      cursor: 'pointer',
+      background: dragging ? 'var(--accent-bg)' : 'var(--surface)',
+      transition: 'all 0.15s',
+      userSelect: 'none',
+    }
+  },
+    React.createElement('div', { style: { fontSize: 32, marginBottom: 8 } }, dragging ? '📥' : '📂'),
+    React.createElement('div', { style: { fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 4 } },
+      dragging ? 'ここで放してください' : message
+    ),
+    React.createElement('div', { style: { fontSize: 12, color: 'var(--text2)', marginBottom: 8 } }, subMessage),
+    status && React.createElement('div', {
+      style: { marginTop: 8, fontSize: 13, fontWeight: 600,
+        color: status.startsWith('エラー') ? 'var(--red)' : 'var(--accent)' }
+    }, status),
+    React.createElement('input', {
+      ref: inputRef,
+      type: 'file',
+      accept: accept,
+      style: { display: 'none' },
+      onChange: handleChange,
+    })
+  );
+}
+
+
+// ===== 日付ユーティリティ（多形式対応・タイムゾーン安全）=====
+// 各種形式の日付文字列 → {y, m, d} に正規化
+function parseDateStr(raw) {
+  if (!raw && raw !== 0) return null;
+  const s = String(raw).trim();
+  if (!s || s === '-' || s === '') return null;
+
+  // Excelシリアル値（数字のみ・5桁程度）
+  if (/^\d{4,6}$/.test(s) && parseInt(s) > 40000 && parseInt(s) < 60000) {
+    // Excelシリアル値: 1900/1/1 = 1 基準（Excelのうるう年バグ含む）
+    const serial = parseInt(s);
+    const excelEpoch = new Date(1899, 11, 30); // 1899-12-30
+    const ms = excelEpoch.getTime() + serial * 86400000;
+    const dt = new Date(ms);
+    return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() };
+  }
+
+  // YYYY-MM-DD 形式
+  let m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (m) return { y: parseInt(m[1]), m: parseInt(m[2]), d: parseInt(m[3]) };
+
+  // YYYY年M月D日 形式
+  m = s.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日?$/);
+  if (m) return { y: parseInt(m[1]), m: parseInt(m[2]), d: parseInt(m[3]) };
+
+  // M/D/YYYY 形式（米国式）
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return { y: parseInt(m[3]), m: parseInt(m[1]), d: parseInt(m[2]) };
+
+  return null;
+}
+
+function dowFromDateStr(dateStr) {
+  const p = parseDateStr(dateStr);
+  if (!p) return 0;
+  return new Date(p.y, p.m - 1, p.d).getDay();
+}
+
+function fmtDate(dateStr) {
+  const p = parseDateStr(dateStr);
+  if (!p) return '-';
+  const dow = ['日','月','火','水','木','金','土'][new Date(p.y, p.m - 1, p.d).getDay()];
+  return p.y + '/' + String(p.m).padStart(2,'0') + '/' + String(p.d).padStart(2,'0') + '(' + dow + ')';
+}
+
+// 日付を YYYY-MM-DD 標準形式に正規化（保存・比較用）
+function normalizeDate(dateStr) {
+  const p = parseDateStr(dateStr);
+  if (!p) return dateStr || '';
+  return p.y + '-' + String(p.m).padStart(2,'0') + '-' + String(p.d).padStart(2,'0');
+}
+
+
+// ===== 文字列正規化 =====
+function normalizeStr(s) {
+  if (!s) return '';
+  return s
+    .toLowerCase()
+    // 全角英数→半角
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    // 全角スペース→半角
+    .replace(/　/g, ' ')
+    // 小文字カタカナ→大文字カタカナ（ァ→ア、ィ→イ、ゥ→ウ、ェ→エ、ォ→オ、ッ→ツ、ャ→ヤ、ュ→ユ、ョ→ヨ）
+    .replace(/ァ/g,'ア').replace(/ィ/g,'イ').replace(/ゥ/g,'ウ').replace(/ェ/g,'エ').replace(/ォ/g,'オ')
+    .replace(/ッ/g,'ツ').replace(/ャ/g,'ヤ').replace(/ュ/g,'ユ').replace(/ョ/g,'ヨ')
+    .replace(/ぁ/g,'あ').replace(/ぃ/g,'い').replace(/ぅ/g,'う').replace(/ぇ/g,'え').replace(/ぉ/g,'お')
+    .replace(/っ/g,'つ').replace(/ゃ/g,'や').replace(/ゅ/g,'ゆ').replace(/ょ/g,'よ')
+    // 複数スペース→1スペース
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function productNameMatch(csvName, productName) {
+  const cn = normalizeStr(csvName.replace(/^\d+_/, ''));
+  const pn = normalizeStr(productName);
+  if (cn === pn) return 1.0;
+  if (cn.includes(pn) || pn.includes(cn)) return 0.8;
+  // キーワード一致
+  const cnWords = cn.split(/[\s・\-]/);
+  const pnWords = pn.split(/[\s・\-]/);
+  let matches = 0;
+  for (const w of cnWords) {
+    if (w.length > 1 && pnWords.some(pw => pw.includes(w) || w.includes(pw))) matches++;
+  }
+  if (cnWords.length > 0 && matches / cnWords.length > 0.5) return 0.5;
+  return 0;
+}
+
+// ===== LocalStorage =====
+const _localCache = {};
+function loadState(key, defaultValue) {
+  if(_localCache[key] !== undefined) return _localCache[key];
+  return defaultValue;
+}
+function saveState(key, value) {
+  _localCache[key] = value;
+  if(window._saveToFirestore) window._saveToFirestore(_localCache);
+}
+function _initFromFirestore(data) {
+  if(!data) return;
+  Object.keys(data).forEach(k => { _localCache[k] = data[k]; });
+}
+
+// ===== メインアプリ =====
+function App() {
+  const [page, setPage] = useState('dashboard');
+  const [products, setProducts] = useState(() => loadState('products', DEFAULT_PRODUCTS));
+  const [stores, setStores] = useState(() => loadState('stores', DEFAULT_STORES));
+  const [salesHistory, setSalesHistory] = useState(() => loadState('salesHistory', []));
+  const [schedules, setSchedules] = useState(() => loadState('schedules', [])); // [{id, storeId, date, location, altLocation, altStoreId, forecastOverrides:{productId:g}}]
+  const [storeInventory, setStoreInventory] = useState(() => loadState('storeInventory', {})); // {storeId: {productId: g}}
+  const [warehouseInventory, setWarehouseInventory] = useState(() => loadState('warehouseInventory', {})); // {productId: g}
+  const [deliveries, setDeliveries] = useState(() => loadState('deliveries', [])); // [{id, storeId, date, items:{productId: bags}}]
+  const [minStock, setMinStock] = useState(() => loadState('minStock', 2000));
+  const [productMapping, setProductMapping] = useState(() => loadState('productMapping', {})); // csvName -> productId
+  const [pendingMappings, setPendingMappings] = useState([]);
+
+  // 保存
+  useEffect(() => { saveState('products', products); }, [products]);
+  useEffect(() => { saveState('stores', stores); }, [stores]);
+  useEffect(() => { saveState('salesHistory', salesHistory); }, [salesHistory]);
+  useEffect(() => { saveState('schedules', schedules); }, [schedules]);
+  useEffect(() => { saveState('storeInventory', storeInventory); }, [storeInventory]);
+  useEffect(() => { saveState('warehouseInventory', warehouseInventory); }, [warehouseInventory]);
+  useEffect(() => { saveState('deliveries', deliveries); }, [deliveries]);
+  useEffect(() => { saveState('minStock', minStock); }, [minStock]);
+  useEffect(() => { saveState('productMapping', productMapping); }, [productMapping]);
+
+  const ctx = {
+    products, setProducts,
+    stores, setStores,
+    salesHistory, setSalesHistory,
+    schedules, setSchedules,
+    storeInventory, setStoreInventory,
+    warehouseInventory, setWarehouseInventory,
+    deliveries, setDeliveries,
+    minStock, setMinStock,
+    productMapping, setProductMapping,
+    pendingMappings, setPendingMappings,
+    page, setPage,
+  };
+
+  const pages = [
+    { id: 'dashboard', label: 'ダッシュボード', icon: '📊' },
+    { id: 'history', label: '販売実績', icon: '📋' },
+    { id: 'schedules', label: '出店スケジュール', icon: '📅' },
+    { id: 'forecast', label: '販売予想', icon: '📈' },
+    { id: 'delivery', label: '納品管理', icon: '📦' },
+    { id: 'roasting', label: '焙煎管理', icon: '☕' },
+    { id: 'inventory', label: '在庫管理', icon: '🏪' },
+    { id: 'products', label: '商品設定', icon: '⚙️' },
+    { id: 'stores', label: '店舗設定', icon: '🚐' },
+    { id: 'backup', label: 'バックアップ', icon: '💾' },
+  ];
+
+  return React.createElement('div', { id: 'app' },
+    React.createElement('div', { className: 'sidebar' },
+      React.createElement('div', { className: 'sidebar-logo' },
+        React.createElement('h1', null, 'コーヒー販売量・焙煎管理'),
+        React.createElement('p', null, 'Sales & Roast Manager')
+      ),
+      React.createElement('nav', { className: 'sidebar-nav' },
+        pages.map(p => React.createElement('div', {
+          key: p.id,
+          className: 'nav-item' + (page === p.id ? ' active' : ''),
+          onClick: () => setPage(p.id)
+        },
+          React.createElement('span', { className: 'nav-icon' }, p.icon),
+          p.label
+        ))
+      )
+    ),
+    React.createElement('div', { className: 'main' },
+      React.createElement('div', { className: 'main-inner' },
+        page === 'dashboard' && React.createElement(Dashboard, ctx),
+        page === 'history' && React.createElement(SalesHistoryPage, ctx),
+        page === 'schedules' && React.createElement(SchedulesPage, ctx),
+        page === 'forecast' && React.createElement(ForecastPage, ctx),
+        page === 'delivery' && React.createElement(DeliveryPage, ctx),
+        page === 'roasting' && React.createElement(RoastingPage, ctx),
+        page === 'inventory' && React.createElement(InventoryPage, ctx),
+        page === 'products' && React.createElement(ProductsPage, ctx),
+        page === 'stores' && React.createElement(StoresPage, ctx),
+        page === 'backup' && React.createElement(BackupPage, ctx),
+      )
+    )
+  );
+}
+
+// ===== 予測ロジック =====
+function computeForecast(schedule, salesHistory, stores, products, productMapping) {
+  // schedule: {storeId, date, location, altLocation, altStoreId}
+  const targetDow = dowFromDateStr(schedule.date); // 0=日（タイムゾーン安全）
+  const targetLoc = schedule.location;
+  const targetStoreId = schedule.storeId;
+
+  const result = {}; // productId -> g
+
+  for (const prod of products) {
+    // この商品に紐付いた csvName 一覧
+    const mappedCsvNames = Object.entries(productMapping)
+      .filter(([, pid]) => pid === prod.id)
+      .map(([cn]) => cn);
+
+    // 取り込み済み実績から該当商品を絞り込む（productId か productNameRaw で照合）
+    const relevantHistory = salesHistory.filter(row => {
+      if (row.productId === prod.id) return true;
+      if (mappedCsvNames.includes(row.productNameRaw)) return true;
+      // 名前ベースでのフォールバック照合
+      if (mappedCsvNames.some(cn => productNameMatch(cn, row.productNameRaw) > 0.5)) return true;
+      if (productNameMatch(prod.name, row.productNameRaw) > 0.5) return true;
+      return false;
+    });
+
+    if (relevantHistory.length === 0) { result[prod.id] = 0; continue; }
+
+    // 条件: 同じ場所 AND 同じ店舗 AND 同じ曜日
+    let matched = relevantHistory.filter(r =>
+      r.location === targetLoc &&
+      r.storeId === targetStoreId &&
+      dowFromDateStr(r.date) === targetDow
+    );
+
+    // フォールバック1: 同じ場所 AND 同じ店舗
+    if (matched.length === 0) {
+      matched = relevantHistory.filter(r =>
+        r.location === targetLoc && r.storeId === targetStoreId
+      );
+    }
+
+    // フォールバック2: 同じ場所 AND 同じ曜日
+    if (matched.length === 0) {
+      matched = relevantHistory.filter(r =>
+        r.location === targetLoc && dowFromDateStr(r.date) === targetDow
+      );
+    }
+
+    // フォールバック3: 同じ場所
+    if (matched.length === 0 && targetLoc) {
+      matched = relevantHistory.filter(r => r.location === targetLoc);
+    }
+
+    // フォールバック4: 代替場所
+    if (matched.length === 0 && schedule.altLocation) {
+      matched = relevantHistory.filter(r =>
+        r.location === schedule.altLocation && r.storeId === targetStoreId
+      );
+    }
+
+    // フォールバック5: 代替店舗 (同じ場所)
+    if (matched.length === 0 && schedule.altStoreId) {
+      matched = relevantHistory.filter(r =>
+        r.location === targetLoc && r.storeId === schedule.altStoreId
+      );
+    }
+
+    // フォールバック6: 全体平均
+    if (matched.length === 0) matched = relevantHistory;
+
+    if (matched.length === 0) { result[prod.id] = 0; continue; }
+
+    const avg = matched.reduce((s, r) => s + (parseFloat(r.salesG) || 0), 0) / matched.length;
+    result[prod.id] = Math.round(avg * 1.1); // 10%アップ
+  }
+
+  return result;
+}
+
+// ===== ダッシュボード =====
+function Dashboard({ products, stores, schedules, salesHistory, storeInventory, warehouseInventory, deliveries, minStock, setPage }) {
+  const today = new Date().toISOString().split('T')[0];
+  const upcoming = schedules.filter(s => s.date >= today).length;
+  const totalSales = salesHistory.length;
+  const activeStores = stores.length;
+
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'page-header' },
+      React.createElement('h2', { className: 'page-title' }, '📊 ダッシュボード')
+    ),
+    React.createElement('div', { className: 'grid-3', style: { marginBottom: 20 } },
+      React.createElement('div', { className: 'stat-card' },
+        React.createElement('div', { className: 'stat-label' }, '稼働店舗数'),
+        React.createElement('div', { className: 'stat-value' }, activeStores, React.createElement('span', { className: 'stat-unit' }, '店舗'))
+      ),
+      React.createElement('div', { className: 'stat-card' },
+        React.createElement('div', { className: 'stat-label' }, '出店予定（今日以降）'),
+        React.createElement('div', { className: 'stat-value' }, upcoming, React.createElement('span', { className: 'stat-unit' }, '件'))
+      ),
+      React.createElement('div', { className: 'stat-card' },
+        React.createElement('div', { className: 'stat-label' }, '実績データ件数'),
+        React.createElement('div', { className: 'stat-value' }, totalSales, React.createElement('span', { className: 'stat-unit' }, '件'))
+      ),
+    ),
+    React.createElement('div', { className: 'alert alert-info' },
+      '👈 左メニューから各機能にアクセスできます。まず「販売実績」でCSVをアップロードし、「出店スケジュール」で予定を入力してください。'
+    ),
+    React.createElement('div', { className: 'grid-2' },
+      React.createElement('div', { className: 'card' },
+        React.createElement('div', { className: 'card-title' }, '📅 直近の出店予定'),
+        schedules.filter(s => s.date >= today).slice(0, 8).length === 0
+          ? React.createElement('p', { className: 'text-sm' }, '出店予定がありません')
+          : React.createElement('table', null,
+            React.createElement('thead', null,
+              React.createElement('tr', null,
+                React.createElement('th', null, '日付'),
+                React.createElement('th', null, '店舗'),
+                React.createElement('th', null, '場所'),
+              )
+            ),
+            React.createElement('tbody', null,
+              schedules
+                .map(s => ({ ...s, _nd: normalizeDate(s.date) }))
+                .filter(s => s._nd >= today)
+                .sort((a, b) => a._nd.localeCompare(b._nd))
+                .slice(0, 8)
+                .map(s => {
+                  const store = stores.find(st => st.id === s.storeId);
+                  return React.createElement('tr', { key: s.id },
+                    React.createElement('td', null, fmtDate(s.date)),
+                    React.createElement('td', null, store ? store.name : '-'),
+                    React.createElement('td', null, s.location || '-'),
+                  );
+                })
+            )
+          )
+      ),
+      React.createElement('div', { className: 'card' },
+        React.createElement('div', { className: 'card-title' }, '☕ クイックアクセス'),
+        React.createElement('div', { className: 'flex flex-col gap-8' },
+          [
+            { label: '📋 CSVをアップロード', page: 'history' },
+            { label: '📅 出店スケジュール登録', page: 'schedules' },
+            { label: '📈 販売予想を確認', page: 'forecast' },
+            { label: '📦 納品指示書を作成', page: 'delivery' },
+            { label: '☕ 焙煎注文書を作成', page: 'roasting' },
+          ].map(item => React.createElement('button', {
+            key: item.page,
+            className: 'btn btn-secondary',
+            style: { textAlign: 'left' },
+            onClick: () => setPage(item.page)
+          }, item.label))
+        )
+      )
+    )
+  );
+}
+
+// ===== 販売実績ページ =====
+function SalesHistoryPage({ salesHistory, setSalesHistory, products, stores, productMapping, setProductMapping, pendingMappings, setPendingMappings }) {
+  const [showMapping, setShowMapping] = useState(false);
+  const [tempMapping, setTempMapping] = useState({});
+  const [localPending, setLocalPending] = useState([]);
+  const [filterStore, setFilterStore] = useState('');
+  const [parseMsg, setParseMsg] = useState('');
+
+  // CSVカラムを柔軟に検索するヘルパー
+  function getCol(row, candidates) {
+    for (const c of candidates) {
+      if (row[c] !== undefined && row[c] !== '') return row[c];
+    }
+    // 部分一致でも探す
+    const keys = Object.keys(row);
+    for (const c of candidates) {
+      const found = keys.find(k => k.includes(c));
+      if (found && row[found] !== undefined && row[found] !== '') return row[found];
+    }
+    return '';
+  }
+
+  function handleCSV(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setParseMsg('読み込み中...');
+
+    // Shift_JIS / UTF-8 両対応：まずUTF-8で試み、文字化けなら再試行
+    function parseWithEncoding(encoding, onDone) {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        encoding: encoding,
+        complete: onDone,
+        error: (err) => setParseMsg('読み込みエラー: ' + err.message)
+      });
+    }
+
+    function processResults(results, usedEncoding) {
+      const rows = results.data;
+      if (!rows.length) {
+        // UTF-8で0件ならShift_JISで再試行
+        if (usedEncoding === 'UTF-8') {
+          parseWithEncoding('Shift_JIS', r => processResults(r, 'Shift_JIS'));
+        } else {
+          setParseMsg('データが見つかりませんでした（列名を確認してください）');
+        }
+        return;
+      }
+
+      const cols = Object.keys(rows[0]);
+
+      // 先頭行で列の役割を自動判定
+      // 商品名列：「価格_商品名」形式の値を含む列、または「商品名」を含む列名
+      const productCol = cols.find(c => rows.slice(0,10).some(r => /^\d+[_\-]/.test(String(r[c] || ''))))
+        || cols.find(c => c.includes('商品'));
+      // 販売量列：数値が入っていて量・数・合計を含む列名
+      const salesCol = cols.find(c => ['販売量合計','販売量','販売数','数量','合計','売上'].some(k => c.includes(k)));
+      // 日付列
+      const dateCol = cols.find(c => ['日付','date','Date','日時','出店日'].some(k => c.includes(k)));
+      // 場所列
+      const locCol = cols.find(c => ['場所','location','出店場所','イベント','会場'].some(k => c.includes(k)));
+      // 店舗列
+      const storeCol = cols.find(c => ['店舗','store','車両','号車','車番','担当'].some(k => c.includes(k)));
+
+      const autoMappingAdditions = {};
+      const unmappedNames = new Set();
+      const newHistory = [];
+      let skipCount = 0;
+
+      for (const row of rows) {
+        const dateVal = dateCol ? (row[dateCol] || '') : getCol(row, ['日付','date','Date','日時','出店日']);
+        const locationVal = locCol ? (row[locCol] || '') : getCol(row, ['場所','location','出店場所','イベント名','イベント']);
+        const storeVal = storeCol ? (row[storeCol] || '') : getCol(row, ['店舗','store','車両','号車','車番','担当']);
+        const productNameRaw = productCol ? (row[productCol] || '') : getCol(row, ['商品名','product','商品']);
+        const salesQty = salesCol ? (row[salesCol] || '0') : getCol(row, ['販売量合計','販売数','販売量','数量','売上数量','合計']);
+
+        if (!productNameRaw || !dateVal) { skipCount++; continue; }
+
+        const normDate = normalizeDate(String(dateVal));
+        if (!normDate) { skipCount++; continue; }
+
+        const cleanName = String(productNameRaw).replace(/^\d+[_\-]/, '').trim();
+        if (!cleanName) { skipCount++; continue; }
+
+        const salesG = (parseFloat(String(salesQty).replace(/[^\d.]/g, '')) || 0) * 100;
+
+        let storeId = null;
+        if (storeVal) {
+          const ns = normalizeStr(String(storeVal));
+          const matchedStore = stores.find(s => {
+            const sn = normalizeStr(s.name);
+            return ns === sn || ns.includes(sn) || sn.includes(ns);
+          });
+          if (matchedStore) storeId = matchedStore.id;
+        }
+
+        let productId = productMapping[cleanName] || autoMappingAdditions[cleanName] || null;
+        if (!productId) {
+          let bestScore = 0, bestProd = null;
+          for (const p of products) {
+            const score = productNameMatch(cleanName, p.name);
+            if (score > bestScore) { bestScore = score; bestProd = p; }
+          }
+          if (bestScore >= 0.8 && bestProd) {
+            productId = bestProd.id;
+            autoMappingAdditions[cleanName] = productId;
+          } else {
+            unmappedNames.add(cleanName);
+          }
+        }
+
+        newHistory.push({
+          id: generateId(),
+          date: normDate,
+          location: String(locationVal).trim(),
+          storeId,
+          storeNameRaw: String(storeVal).trim(),
+          productNameRaw: cleanName,
+          productId,
+          salesG,
+        });
+      }
+
+      if (Object.keys(autoMappingAdditions).length > 0) {
+        setProductMapping(prev => ({ ...prev, ...autoMappingAdditions }));
+      }
+
+      setSalesHistory(prev => {
+        const existing = new Set(prev.map(r => `${r.date}|${r.location}|${r.storeId}|${r.productNameRaw}`));
+        const toAdd = newHistory.filter(r => !existing.has(`${r.date}|${r.location}|${r.storeId}|${r.productNameRaw}`));
+        return [...prev, ...toAdd];
+      });
+
+      const msg = `取り込み完了: ${newHistory.length}件追加${skipCount > 0 ? `（${skipCount}行スキップ）` : ''}【${usedEncoding}】`;
+      setParseMsg(msg);
+
+      if (unmappedNames.size > 0) {
+        setLocalPending([...unmappedNames]);
+        setPendingMappings([...unmappedNames]);
+        setTempMapping({});
+        setShowMapping(true);
+      }
+    }
+
+    parseWithEncoding('UTF-8', r => processResults(r, 'UTF-8'));
+    e.target.value = '';
+  }
+
+  function applyMapping() {
+    // tempMapping: {csvName -> productId}
+    const newMapping = { ...productMapping, ...tempMapping };
+    setProductMapping(newMapping);
+    // 未紐付きレコードに productId を反映
+    setSalesHistory(prev => prev.map(r => {
+      if (!r.productId && newMapping[r.productNameRaw]) {
+        return { ...r, productId: newMapping[r.productNameRaw] };
+      }
+      return r;
+    }));
+    setShowMapping(false);
+    setTempMapping({});
+    setLocalPending([]);
+  }
+
+  function clearHistory() {
+    if (confirm('実績データをすべて削除しますか？')) { setSalesHistory([]); setParseMsg(''); }
+  }
+
+  function exportCSV() {
+    const rows = salesHistory.map(r => {
+      const store = stores.find(s => s.id === r.storeId);
+      const prod = products.find(p => p.id === r.productId);
+      return {
+        日付: r.date, 場所: r.location, 店舗: store ? store.name : r.storeNameRaw,
+        商品名: r.productNameRaw, 商品: prod ? prod.name : '',
+        販売量合計_100g単位: r.salesG / 100, 販売量g: r.salesG
+      };
+    });
+    const csv = Papa.unparse(rows);
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'sales_history.csv'; a.click();
+  }
+
+  const displayed = salesHistory.filter(r => !filterStore || r.storeId === filterStore);
+  const unmappedCount = salesHistory.filter(r => !r.productId).length;
+
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'page-header' },
+      React.createElement('h2', { className: 'page-title' }, '📋 販売実績データ'),
+      React.createElement('div', { className: 'flex gap-8' },
+        React.createElement('button', { className: 'btn btn-secondary btn-sm', onClick: exportCSV }, '⬇ CSVダウンロード'),
+        React.createElement('button', { className: 'btn btn-danger btn-sm', onClick: clearHistory }, '全削除'),
+      )
+    ),
+
+    React.createElement('div', { className: 'card mb-12' },
+      React.createElement('div', { className: 'card-title' }, '📂 CSVファイルをアップロード'),
+      React.createElement('div', { className: 'alert alert-info', style: { marginBottom: 12 } },
+        React.createElement('div', null, '対応するCSV列名（いずれかが含まれていれば自動認識）:'),
+        React.createElement('div', { style: { marginTop: 4, fontSize: 11 } },
+          '日付: 「日付」「date」「出店日」 ／ 場所: 「場所」「出店場所」「イベント名」 ／ 店舗: 「店舗」「車両」「号車」',
+        ),
+        React.createElement('div', { style: { marginTop: 2, fontSize: 11 } },
+          '商品名: 「商品名」（価格_商品名形式も対応）／ 販売量: 「販売量合計」「販売数」「数量」（100g単位）',
+        ),
+      ),
+      React.createElement(DropZone, {
+        accept: '.csv,.CSV',
+        message: 'クリックまたはCSVファイルをここにドロップ',
+        subMessage: `読み込み済み: ${salesHistory.length}件${unmappedCount > 0 ? ` ／ 未紐付き: ${unmappedCount}件` : ''}`,
+        status: parseMsg,
+        onFile: (file) => {
+          setParseMsg('読み込み中...');
+
+          function looksGarbled(rows) {
+            if (!rows.length) return true;
+            const sample = Object.keys(rows[0]).join('') + Object.values(rows[0]).join('');
+            return sample.includes('\ufffd') || sample.includes('\u0083') || sample.includes('\u0093');
+          }
+
+          function processResults(rows, enc) {
+            if (!rows.length) { setParseMsg('データが0件でした'); return; }
+            const cols = Object.keys(rows[0] || {});
+
+            // ===== 列名を柔軟に検出 =====
+            // 完全一致→部分一致→値で推測、の順で探す
+            function findCol(keys, valuePredicate) {
+              // 列名の完全一致
+              for (const k of keys) {
+                const c = cols.find(c => c.trim() === k);
+                if (c !== undefined) return c;
+              }
+              // 列名の部分一致
+              for (const k of keys) {
+                const c = cols.find(c => c.includes(k) || k.includes(c.trim()));
+                if (c !== undefined) return c;
+              }
+              // 値で推測（valuePredicate が渡された場合）
+              if (valuePredicate) {
+                const c = cols.find(col =>
+                  rows.slice(0, 20).some(r => valuePredicate(String(r[col] || '')))
+                );
+                if (c !== undefined) return c;
+              }
+              return null;
+            }
+
+            // 日付列：値が日付らしい列を推測
+            const dateCol = findCol(
+              ['日付','date','Date','日時','出店日','販売日'],
+              v => /\d{4}[\-\/]\d{1,2}[\-\/]\d{1,2}/.test(v) || (/^\d{5,6}$/.test(v) && parseInt(v) > 40000)
+            );
+            // 商品名列：「数字_」始まりの値を含む列、または「商品」を含む列名
+            const productCol = findCol(
+              ['商品名','商品','product','品名','item'],
+              v => /^\d+[_\-]/.test(v) || v.includes('ブレンド') || v.includes('コーヒー')
+            );
+            // 販売量列：数値が入っていて量・数・合計を含む列
+            const salesCol = findCol(
+              ['販売量合計','販売量','販売数','数量','合計','売上数量','売上','amount','qty','quantity'],
+              v => /^\d+(\.\d+)?$/.test(v.trim()) && parseFloat(v) > 0
+            );
+            // 場所列
+            const locCol = findCol(['場所','location','出店場所','イベント名','イベント','会場','venue'], null);
+            // 店舗列
+            const storeCol = findCol(['店舗名','店舗','store','車両名','車両','号車','車番','担当'], null);
+
+            // デバッグ：検出結果をコンソールに出力
+            console.log('列検出結果:', { dateCol, productCol, salesCol, locCol, storeCol });
+            console.log('全列名:', cols);
+            console.log('先頭行:', rows[0]);
+
+            // 列が見つからない場合の詳細エラー
+            const missing = [];
+            if (!dateCol) missing.push('日付');
+            if (!productCol) missing.push('商品名');
+            if (!salesCol) missing.push('販売量');
+            if (missing.length > 0) {
+              setParseMsg(`列「${missing.join('・')}」が見つかりません。CSV列名: [${cols.join(', ')}]`);
+              return;
+            }
+
+            const autoMap = {};
+            const unmapped = new Set();
+            const newHistory = [];
+            let skipNoDate = 0, skipNoProd = 0;
+
+            for (const row of rows) {
+              const dateVal       = String(row[dateCol] || '').trim();
+              const productNameRaw= String(row[productCol] || '').trim();
+              const salesQtyRaw   = String(row[salesCol] || '0').trim();
+              const locationVal   = locCol   ? String(row[locCol]   || '').trim() : '';
+              const storeVal      = storeCol ? String(row[storeCol] || '').trim() : '';
+
+              if (!dateVal)        { skipNoDate++; continue; }
+              if (!productNameRaw) { skipNoProd++; continue; }
+
+              const normDate = normalizeDate(dateVal);
+              if (!normDate) { skipNoDate++; continue; }
+
+              // 「価格_商品名」形式から商品名を取り出す
+              const cleanName = productNameRaw.replace(/^\d+[_\-]\s*/, '').trim();
+              if (!cleanName) { skipNoProd++; continue; }
+
+              const salesG = (parseFloat(salesQtyRaw.replace(/[^\d.]/g, '')) || 0) * 100;
+
+              // 店舗マッチング
+              let storeId = null;
+              if (storeVal) {
+                const ns = normalizeStr(storeVal);
+                const m = stores.find(s => {
+                  const sn = normalizeStr(s.name);
+                  return ns === sn || ns.includes(sn) || sn.includes(ns);
+                });
+                if (m) storeId = m.id;
+              }
+
+              // 商品マッチング
+              let productId = productMapping[cleanName] || autoMap[cleanName] || null;
+              if (!productId) {
+                let best = 0, bestP = null;
+                for (const p of products) {
+                  const sc = productNameMatch(cleanName, p.name);
+                  if (sc > best) { best = sc; bestP = p; }
+                }
+                if (best >= 0.5 && bestP) {
+                  productId = bestP.id;
+                  autoMap[cleanName] = productId;
+                } else {
+                  unmapped.add(cleanName);
+                }
+              }
+
+              newHistory.push({
+                id: generateId(),
+                date: normDate,
+                location: locationVal,
+                storeId,
+                storeNameRaw: storeVal,
+                productNameRaw: cleanName,
+                productId,
+                salesG,
+              });
+            }
+
+            if (Object.keys(autoMap).length > 0) {
+              setProductMapping(prev => ({ ...prev, ...autoMap }));
+            }
+
+            setSalesHistory(prev => {
+              const ex = new Set(prev.map(r => `${r.date}|${r.location}|${r.storeNameRaw}|${r.productNameRaw}`));
+              const toAdd = newHistory.filter(r => !ex.has(`${r.date}|${r.location}|${r.storeNameRaw}|${r.productNameRaw}`));
+              const dupCount = newHistory.length - toAdd.length;
+              let msg = `完了: ${toAdd.length}件追加`;
+              if (dupCount > 0) msg += `（重複${dupCount}件）`;
+              if (skipNoDate > 0) msg += `、日付不明${skipNoDate}行`;
+              if (skipNoProd > 0) msg += `、商品名空白${skipNoProd}行`;
+              msg += ` [${enc}]`;
+              setParseMsg(msg);
+              return [...prev, ...toAdd];
+            });
+
+            if (unmapped.size > 0) {
+              setLocalPending([...unmapped]);
+              setPendingMappings([...unmapped]);
+              setTempMapping({});
+              setShowMapping(true);
+            }
+          }
+
+          function tryShiftJIS() {
+            Papa.parse(file, { header: true, skipEmptyLines: true, encoding: 'Shift_JIS',
+              complete: (res2) => {
+                if (!res2.data.length) return setParseMsg('データが読み取れませんでした。');
+                processResults(res2.data, 'Shift_JIS');
+              },
+              error: (err) => setParseMsg('エラー: ' + err.message)
+            });
+          }
+
+          Papa.parse(file, { header: true, skipEmptyLines: true, encoding: 'UTF-8',
+            complete: (res) => {
+              if (!res.data.length || looksGarbled(res.data)) { tryShiftJIS(); }
+              else { processResults(res.data, 'UTF-8'); }
+            },
+            error: () => tryShiftJIS()
+          });
+        }
+      }),
+      unmappedCount > 0 && React.createElement('div', { style: { marginTop: 10 } },
+        React.createElement('button', {
+          className: 'btn btn-secondary btn-sm',
+          onClick: () => {
+            const names = [...new Set(salesHistory.filter(r => !r.productId).map(r => r.productNameRaw))];
+            setLocalPending(names); setPendingMappings(names); setTempMapping({}); setShowMapping(true);
+          }
+        }, `⚠ 未紐付き商品を確認・設定する (${unmappedCount}件)`)
+      )
+    ),
+
+    // 商品名マッピングモーダル
+    showMapping && React.createElement('div', { className: 'modal-overlay' },
+      React.createElement('div', { className: 'modal' },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, '商品名の紐付け設定'),
+          React.createElement('button', { className: 'modal-close', onClick: () => setShowMapping(false) }, '✕')
+        ),
+        React.createElement('p', { className: 'text-sm mb-12' },
+          'CSV内の商品名と、アプリ内の商品を対応させてください。紐付けすることで予測精度が上がります。'
+        ),
+        localPending.map(csvName =>
+          React.createElement('div', { key: csvName, className: 'form-group mb-12' },
+            React.createElement('label', null, `CSV商品名: 「${csvName}」`),
+            React.createElement('select', {
+              value: tempMapping[csvName] || '',
+              onChange: e => setTempMapping(prev => ({ ...prev, [csvName]: e.target.value }))
+            },
+              React.createElement('option', { value: '' }, '-- 対応商品を選択（不明はスキップ）--'),
+              products.map(p => React.createElement('option', { key: p.id, value: p.id }, p.name))
+            )
+          )
+        ),
+        React.createElement('div', { className: 'flex gap-8 mt-16' },
+          React.createElement('button', { className: 'btn btn-primary', onClick: applyMapping }, '保存して適用'),
+          React.createElement('button', { className: 'btn btn-secondary', onClick: () => setShowMapping(false) }, 'あとで設定する'),
+        )
+      )
+    ),
+
+    React.createElement('div', { className: 'card' },
+      React.createElement('div', { className: 'flex items-center justify-between mb-12' },
+        React.createElement('div', { className: 'card-title' }, `実績一覧 (${displayed.length}件、新しい順100件表示)`),
+        React.createElement('select', {
+          value: filterStore,
+          onChange: e => setFilterStore(e.target.value),
+          style: { width: 120 }
+        },
+          React.createElement('option', { value: '' }, '全店舗'),
+          stores.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))
+        )
+      ),
+      React.createElement('div', { className: 'scroll-x' },
+        React.createElement('table', null,
+          React.createElement('thead', null,
+            React.createElement('tr', null,
+              React.createElement('th', null, '日付'),
+              React.createElement('th', null, '場所'),
+              React.createElement('th', null, '店舗'),
+              React.createElement('th', null, 'CSV商品名'),
+              React.createElement('th', null, '紐付き商品'),
+              React.createElement('th', { className: 'text-right' }, '販売量'),
+            )
+          ),
+          React.createElement('tbody', null,
+            displayed.length === 0
+              ? React.createElement('tr', null, React.createElement('td', { colSpan: 6, className: 'text-center text-sm', style: { padding: 20 } }, 'データがありません。CSVをアップロードしてください。'))
+              : displayed.slice().reverse().slice(0, 100).map(r => {
+                const store = stores.find(s => s.id === r.storeId);
+                const prod = products.find(p => p.id === r.productId);
+                return React.createElement('tr', { key: r.id },
+                  React.createElement('td', null, r.date),
+                  React.createElement('td', null, r.location || '-'),
+                  React.createElement('td', null, store ? store.name : (r.storeNameRaw || '-')),
+                  React.createElement('td', null, r.productNameRaw),
+                  React.createElement('td', null, prod
+                    ? React.createElement('span', { className: 'badge badge-green' }, prod.name)
+                    : React.createElement('span', { className: 'badge badge-red' }, '未紐付き')
+                  ),
+                  React.createElement('td', { className: 'text-right' }, `${r.salesG.toLocaleString()}g`),
+                );
+              })
+          )
+        )
+      )
+    )
+  );
+}
+
+// ===== 出店スケジュールページ =====
+function SchedulesPage({ schedules, setSchedules, stores, salesHistory }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [filterStore, setFilterStore] = useState('');
+  const [form, setForm] = useState({ storeId: '', date: '', location: '', altLocation: '', altStoreId: '', deliveryDate: '' });
+  const [csvMsg, setCsvMsg] = useState('');
+  const [tab, setTab] = useState('list');
+  const [unmatchedStoreRows, setUnmatchedStoreRows] = useState([]);
+  const [unmatchedStoreMapping, setUnmatchedStoreMapping] = useState({});
+  const [showStoreMapping, setShowStoreMapping] = useState(false);
+  const [onStoreMapCommit, setOnStoreMapCommit] = useState(null); // [noStoreRows, commitFn] の配列
+  const [bulkDelStore, setBulkDelStore] = useState('');
+  const [bulkDelFrom, setBulkDelFrom] = useState('');
+  const [bulkDelTo, setBulkDelTo] = useState('');
+  const [shiftFrom, setShiftFrom] = useState('');
+  const [shiftTo, setShiftTo] = useState('');
+  const [shiftPreview, setShiftPreview] = useState([]);
+  const [shiftMsg, setShiftMsg] = useState('');
+  const [shiftAllRows, setShiftAllRows] = useState([]); // 全行キャッシュ
+
+  const locations = useMemo(() => [...new Set(salesHistory.map(r => r.location).filter(Boolean))], [salesHistory]);
+
+  // シフトCSV全行が変わるか期間が変わったらプレビュー更新
+  useEffect(() => {
+    if (!shiftAllRows.length) { setShiftPreview([]); return; }
+    const filtered = shiftAllRows.filter(r => {
+      const nd = r.date;
+      const fromOk = !shiftFrom || nd >= shiftFrom;
+      const toOk   = !shiftTo   || nd <= shiftTo;
+      return fromOk && toOk;
+    });
+    setShiftPreview(filtered);
+  }, [shiftAllRows, shiftFrom, shiftTo]);
+
+  function openAdd() { setForm({ storeId: stores[0]?.id || '', date: '', location: '', altLocation: '', altStoreId: '', deliveryDate: '' }); setEditId(null); setShowAdd(true); }
+  function openEdit(s) { setForm({ ...s }); setEditId(s.id); setShowAdd(true); }
+
+  function save() {
+    if (!form.storeId || !form.date) { alert('店舗と日付を入力してください'); return; }
+    if (editId) {
+      setSchedules(prev => prev.map(s => s.id === editId ? { ...form, id: editId } : s));
+    } else {
+      setSchedules(prev => [...prev, { ...form, id: generateId() }]);
+    }
+    setShowAdd(false);
+  }
+
+  function del(id) {
+    if (confirm('このスケジュールを削除しますか？')) setSchedules(prev => prev.filter(s => s.id !== id));
+  }
+
+  function clearAll() {
+    if (confirm('スケジュールをすべて削除しますか？')) setSchedules([]);
+  }
+
+  // スケジュールCSVダウンロード（テンプレート）
+  function downloadTemplate() {
+    const header = '出店日,店舗名,出店場所,納品予定日,代替場所,代替店舗名';
+    const example = `2025-04-01,1号車,〇〇マルシェ,2025-03-28,,
+2025-04-01,2号車,△△公園,2025-03-28,,
+2025-04-05,1号車,□□フェスタ,2025-04-03,〇〇マルシェ,`;
+    const blob = new Blob(['\ufeff' + header + '\n' + example], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'schedule_template.csv'; a.click();
+  }
+
+  // 現在のスケジュールをCSVエクスポート
+  function exportSchedules() {
+    const rows = schedules.map(s => {
+      const store = stores.find(st => st.id === s.storeId);
+      const altStore = stores.find(st => st.id === s.altStoreId);
+      return {
+        出店日: s.date,
+        店舗名: store?.name || '',
+        出店場所: s.location || '',
+        納品予定日: s.deliveryDate || '',
+        代替場所: s.altLocation || '',
+        代替店舗名: altStore?.name || '',
+      };
+    });
+    const csv = Papa.unparse(rows);
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'schedules.csv'; a.click();
+  }
+
+  // シフト管理CSVハンドラ
+  function handleShiftCSV(file) {
+    setShiftMsg('読み込み中...');
+    setShiftPreview([]);
+    setShiftAllRows([]);
+
+    function looksGarbled(rows) {
+      if (!rows.length) return true;
+      const sample = Object.keys(rows[0]).join('') + Object.values(rows[0]).join('');
+      return sample.includes('\ufffd');
+    }
+
+    function processShiftRows(rows) {
+      if (!rows.length) { setShiftMsg('データが読み取れませんでした'); return; }
+      const cols = Object.keys(rows[0]);
+
+      // 列を柔軟に検出
+      function findCol(keys, pred) {
+        for (const k of keys) {
+          const c = cols.find(c => c.trim() === k);
+          if (c) return c;
+        }
+        for (const k of keys) {
+          const c = cols.find(c => c.includes(k));
+          if (c) return c;
+        }
+        if (pred) return cols.find(c => rows.slice(0,10).some(r => pred(String(r[c]||''))));
+        return null;
+      }
+
+      const dateCol  = findCol(['日付','date','Date','出店日','シフト日'],
+        v => /\d{4}[\-\/]\d{1,2}[\-\/]\d{1,2}/.test(v) || (/^\d{5,6}$/.test(v) && parseInt(v)>40000));
+      const storeCol = findCol(['店舗名','店舗','号車','車両','担当車両'], null);
+      const locCol   = findCol(['出店場所','場所','会場','イベント','location'], null);
+
+      if (!dateCol) { setShiftMsg(`日付列が見つかりません。列名: [${cols.join(', ')}]`); return; }
+
+      const parsed = [];
+      for (const row of rows) {
+        const dateVal  = String(row[dateCol]||'').trim();
+        const storeVal = storeCol ? String(row[storeCol]||'').trim() : '';
+        const locVal   = locCol   ? String(row[locCol]||'').trim()   : '';
+        if (!dateVal) continue;
+        const normDate = normalizeDate(dateVal);
+        if (!normDate) continue;
+
+        // 店舗マッチング
+        let storeId = null;
+        if (storeVal) {
+          const ns = normalizeStr(storeVal);
+          let m = stores.find(s => normalizeStr(s.name) === ns);
+          if (!m) m = stores.find(s => { const sn=normalizeStr(s.name); return ns.includes(sn)||sn.includes(ns); });
+          if (!m) { const num=storeVal.replace(/[^0-9]/g,''); if(num) m=stores.find(s=>normalizeStr(s.name).replace(/[^0-9]/g,'')===num); }
+          if (m) storeId = m.id;
+        }
+        if (!storeId) continue; // 店舗不明行はスキップ
+
+        parsed.push({ date: normDate, storeId, storeRaw: storeVal, location: locVal });
+      }
+
+      setShiftAllRows(parsed);
+      setShiftMsg(`読み込み完了: ${parsed.length}件（期間を指定してプレビューを確認してください）`);
+    }
+
+    function tryShiftJIS() {
+      Papa.parse(file, { header:true, skipEmptyLines:true, encoding:'Shift_JIS',
+        complete: r => { if(!r.data.length) { setShiftMsg('データが読み取れませんでした'); return; } processShiftRows(r.data); },
+        error: err => setShiftMsg('エラー: '+err.message)
+      });
+    }
+    Papa.parse(file, { header:true, skipEmptyLines:true, encoding:'UTF-8',
+      complete: r => { if(!r.data.length||looksGarbled(r.data)) tryShiftJIS(); else processShiftRows(r.data); },
+      error: () => tryShiftJIS()
+    });
+  }
+
+  // シフトプレビューをスケジュールに取り込む
+  function commitShiftImport() {
+    if (!shiftPreview.length) return;
+    const toAdd = shiftPreview.map(r => ({
+      id: generateId(), storeId: r.storeId, date: r.date,
+      location: r.location, deliveryDate: '', altLocation: '', altStoreId: ''
+    }));
+    setSchedules(prev => {
+      const existing = new Set(prev.map(s => `${s.date}|${s.storeId}`));
+      const filtered = toAdd.filter(s => !existing.has(`${s.date}|${s.storeId}`));
+      const dup = toAdd.length - filtered.length;
+      setShiftMsg(`取込完了: ${filtered.length}件追加${dup>0?`（重複${dup}件スキップ）`:''}`);
+      return [...prev, ...filtered];
+    });
+    setShiftPreview([]);
+    setShiftAllRows([]);
+  }
+
+  // スケジュールCSV行処理
+  function processScheduleRows(rows) {
+    if (!rows.length) { setCsvMsg('データが見つかりませんでした'); return; }
+
+    const cols = Object.keys(rows[0] || {});
+
+    // デバッグ用：列名を表示
+    console.log('CSV列名:', cols);
+    console.log('先頭行サンプル:', rows[0]);
+
+    // 列名から値を取得（完全一致優先、次に部分一致）
+    function getVal(row, keys) {
+      for (const k of keys) {
+        if (row[k] !== undefined && String(row[k]).trim() !== '') return String(row[k]).trim();
+      }
+      // 部分一致
+      for (const k of cols) {
+        if (keys.some(kk => k.includes(kk) || kk.includes(k))) {
+          if (row[k] !== undefined && String(row[k]).trim() !== '') return String(row[k]).trim();
+        }
+      }
+      return '';
+    }
+
+    // 店舗名列を探す（列名バリエーション対応）
+    function getStoreVal(row) {
+      return getVal(row, ['店舗名','店舗','車両名','車両','号車','車番','担当者','担当','車']);
+    }
+
+    // 店舗マッチング
+    function matchStore(val) {
+      if (!val) return null;
+      const ns = normalizeStr(val);
+      let m = stores.find(s => normalizeStr(s.name) === ns);
+      if (m) return m;
+      m = stores.find(s => { const sn = normalizeStr(s.name); return ns.includes(sn) || sn.includes(ns); });
+      if (m) return m;
+      // 数字だけ抽出して照合（「1」→「1号車」など）
+      const num = val.replace(/[^0-9]/g, '');
+      if (num) {
+        m = stores.find(s => normalizeStr(s.name).replace(/[^0-9]/g, '') === num);
+        if (m) return m;
+      }
+      return null;
+    }
+
+    const readyRows = [];
+    const noStoreRows = [];
+    let skipNoDate = 0;
+
+    for (const row of rows) {
+      const dateVal  = getVal(row, ['出店日','日付','date','Date']);
+      const storeVal = getStoreVal(row);
+      const locVal   = getVal(row, ['出店場所','場所','location','会場']);
+      const delVal   = getVal(row, ['納品予定日','納品日']);
+      const altLocVal= getVal(row, ['代替場所','代替出店場所']);
+      const altStoVal= getVal(row, ['代替店舗名','代替店舗']);
+
+      // 完全空行はスキップ
+      if (!dateVal && !storeVal) continue;
+      if (!dateVal) { skipNoDate++; continue; }
+
+      const normDate = normalizeDate(String(dateVal));
+      if (!normDate) { skipNoDate++; continue; }
+
+      const normDelivery = delVal ? normalizeDate(delVal) : '';
+      const matched    = matchStore(storeVal);
+      const altMatched = matchStore(altStoVal);
+
+      if (matched) {
+        readyRows.push({
+          id: generateId(), storeId: matched.id, date: normDate,
+          location: locVal, deliveryDate: normDelivery,
+          altLocation: altLocVal, altStoreId: altMatched?.id || ''
+        });
+      } else {
+        noStoreRows.push({
+          rawName: storeVal || '(店舗名なし)', normDate, locVal,
+          normDelivery, altLocVal, altStoreId: altMatched?.id || ''
+        });
+      }
+    }
+
+    console.log(`処理結果: ready=${readyRows.length}, noStore=${noStoreRows.length}, skipNoDate=${skipNoDate}`);
+
+    // 取り込み実行
+    function commit(extra) {
+      const all = [...readyRows, ...(extra || [])];
+      if (all.length === 0) {
+        let msg = '取り込み可能なデータがありませんでした。';
+        if (noStoreRows.length > 0) msg += ` 店舗名不明: ${noStoreRows.length}件（CSV列名: ${cols.join(', ')}）`;
+        if (skipNoDate > 0) msg += ` 日付不明: ${skipNoDate}件`;
+        setCsvMsg(msg);
+        return;
+      }
+      setSchedules(prev => {
+        const existing = new Set(prev.map(s => `${s.date}|${s.storeId}`));
+        const toAdd = all.filter(s => !existing.has(`${s.date}|${s.storeId}`));
+        const dupCount = all.length - toAdd.length;
+        let msg = `完了: ${toAdd.length}件追加`;
+        if (dupCount > 0) msg += `（重複${dupCount}件スキップ）`;
+        if (skipNoDate > 0) msg += `、日付不明${skipNoDate}件`;
+        setCsvMsg(msg);
+        return [...prev, ...toAdd];
+      });
+    }
+
+    if (noStoreRows.length > 0) {
+      // モーダルで手動割り当て（state に配列で保持）
+      setUnmatchedStoreRows(noStoreRows);
+      setUnmatchedStoreMapping({});
+      setShowStoreMapping(true);
+      // コールバックは配列で保持（関数をstateに入れるとReactが実行してしまうため）
+      setOnStoreMapCommit([noStoreRows, commit]);
+      // 一致分は先に登録
+      if (readyRows.length > 0) commit([]);
+    } else {
+      commit([]);
+    }
+  }
+
+  // スケジュールCSVアップロード
+  function handleScheduleCSV(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCsvMsg('読み込み中...');
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const rows = results.data;
+        if (!rows.length) { setCsvMsg('データが見つかりませんでした'); return; }
+
+        let added = 0, skipped = 0;
+        const newSchedules = [];
+
+        for (const row of rows) {
+          // 列名を柔軟に取得
+          const dateVal = row['出店日'] || row['日付'] || row['date'] || '';
+          const storeNameVal = row['店舗名'] || row['店舗'] || row['車両'] || row['号車'] || '';
+          const locationVal = row['出店場所'] || row['場所'] || row['location'] || '';
+          const deliveryDateVal = row['納品予定日'] || row['納品日'] || '';
+          const altLocationVal = row['代替場所'] || row['代替出店場所'] || '';
+          const altStoreNameVal = row['代替店舗名'] || row['代替店舗'] || '';
+
+          if (!dateVal) { skipped++; continue; }
+
+          // 店舗名からstoreIdを解決
+          let storeId = '';
+          if (storeNameVal) {
+            const ns = normalizeStr(storeNameVal);
+            const matched = stores.find(s => {
+              const sn = normalizeStr(s.name);
+              return ns === sn || ns.includes(sn) || sn.includes(ns);
+            });
+            if (matched) storeId = matched.id;
+          }
+          if (!storeId) { skipped++; continue; } // 店舗が特定できない行はスキップ
+          let altStoreId = '';
+          if (altStoreNameVal) {
+            const ns = normalizeStr(altStoreNameVal);
+            const matched = stores.find(s => normalizeStr(s.name) === ns || normalizeStr(s.name).includes(ns));
+            if (matched) altStoreId = matched.id;
+          }
+
+          const normDate = normalizeDate(dateVal);
+          const normDelivery = deliveryDateVal ? normalizeDate(deliveryDateVal) : '';
+          if (!normDate) { skipped++; continue; } // 日付が解析できない場合はスキップ
+
+          newSchedules.push({
+            id: generateId(),
+            storeId,
+            date: normDate,
+            location: locationVal,
+            deliveryDate: normDelivery,
+            altLocation: altLocationVal,
+            altStoreId,
+          });
+          added++;
+        }
+
+        setSchedules(prev => {
+          // 重複除去（同じ日付×店舗）
+          const existing = new Set(prev.map(s => `${s.date}|${s.storeId}`));
+          const toAdd = newSchedules.filter(s => !existing.has(`${s.date}|${s.storeId}`));
+          return [...prev, ...toAdd];
+        });
+
+        setCsvMsg(`完了: ${added}件追加、${skipped}件スキップ（日付/店舗が特定できなかった行）`);
+      },
+      error: (err) => { setCsvMsg('エラー: ' + err.message); }
+    });
+    e.target.value = '';
+  }
+
+  const displayed = schedules
+    .map(s => ({ ...s, _normDate: normalizeDate(s.date) }))
+    .filter(s => !filterStore || s.storeId === filterStore)
+    .sort((a, b) => a._normDate.localeCompare(b._normDate));
+
+  return React.createElement('div', null,
+
+    // 店舗名未一致モーダル
+    showStoreMapping && React.createElement('div', { className: 'modal-overlay' },
+      React.createElement('div', { className: 'modal' },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, '⚠ 店舗名を手動で割り当て'),
+          React.createElement('button', { className: 'modal-close', onClick: () => setShowStoreMapping(false) }, '✕')
+        ),
+        React.createElement('p', { className: 'text-sm mb-12' },
+          'CSV内の店舗名がアプリの登録店舗と一致しませんでした。対応する店舗を選んでください。'
+        ),
+        unmatchedStoreRows.map((r, i) =>
+          React.createElement('div', { key: i, className: 'form-group mb-12' },
+            React.createElement('label', null,
+              `CSV「${r.rawName}」(${r.normDate} ${r.locVal||''})`
+            ),
+            React.createElement('select', {
+              value: unmatchedStoreMapping[i] || '',
+              onChange: e => setUnmatchedStoreMapping(prev => ({ ...prev, [i]: e.target.value })),
+              style: { width: '100%' }
+            },
+              React.createElement('option', { value: '' }, '-- スキップ（取り込まない）--'),
+              stores.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))
+            )
+          )
+        ),
+        React.createElement('div', { className: 'flex gap-8 mt-16' },
+          React.createElement('button', { className: 'btn btn-primary', onClick: () => {
+            if (onStoreMapCommit) {
+              const [noStoreRows, commit] = onStoreMapCommit;
+              const extra = noStoreRows
+                .map((r, i) => unmatchedStoreMapping[i] ? {
+                  id: generateId(), storeId: unmatchedStoreMapping[i],
+                  date: r.normDate, location: r.locVal, deliveryDate: r.normDelivery,
+                  altLocation: r.altLocVal, altStoreId: r.altStoreId
+                } : null)
+                .filter(Boolean);
+              commit(extra);
+            }
+            setShowStoreMapping(false);
+          }}, '適用して取り込む'),
+          React.createElement('button', { className: 'btn btn-secondary',
+            onClick: () => setShowStoreMapping(false) }, 'スキップして閉じる'),
+        )
+      )
+    ),
+
+    React.createElement('div', { className: 'page-header' },
+      React.createElement('h2', { className: 'page-title' }, '📅 出店スケジュール'),
+      React.createElement('div', { className: 'flex gap-8', style: { flexWrap: 'wrap' } },
+        React.createElement('select', {
+          value: filterStore, onChange: e => setFilterStore(e.target.value), style: { width: 120 }
+        },
+          React.createElement('option', { value: '' }, '全店舗'),
+          stores.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))
+        ),
+        React.createElement('button', { className: 'btn btn-secondary btn-sm', onClick: exportSchedules }, '⬇ CSVエクスポート'),
+        React.createElement('button', { className: 'btn btn-danger btn-sm', onClick: clearAll }, '全削除'),
+        React.createElement('button', { className: 'btn btn-primary', onClick: openAdd }, '+ 手動追加')
+      )
+    ),
+
+    // 部分削除パネル
+    React.createElement('div', { className: 'card mb-12' },
+      React.createElement('div', { className: 'card-title' }, '🗑 部分削除'),
+      React.createElement('div', { className: 'flex gap-12 items-center', style: { flexWrap: 'wrap' } },
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '店舗'),
+          React.createElement('select', {
+            value: bulkDelStore, onChange: e => setBulkDelStore(e.target.value), style: { width: 120 }
+          },
+            React.createElement('option', { value: '' }, '全店舗'),
+            stores.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))
+          )
+        ),
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '開始日'),
+          React.createElement('input', { type: 'date', value: bulkDelFrom,
+            onChange: e => setBulkDelFrom(e.target.value), style: { width: 140 } })
+        ),
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '終了日'),
+          React.createElement('input', { type: 'date', value: bulkDelTo,
+            onChange: e => setBulkDelTo(e.target.value), style: { width: 140 } })
+        ),
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '\u00a0'),
+          React.createElement('div', { className: 'flex gap-8 items-center' },
+            React.createElement('span', { className: 'badge badge-amber' },
+              `対象: ${(() => {
+                return schedules.filter(s => {
+                  const nd = normalizeDate(s.date) || s.date;
+                  const storeOk = !bulkDelStore || s.storeId === bulkDelStore;
+                  const fromOk  = !bulkDelFrom || nd >= bulkDelFrom;
+                  const toOk    = !bulkDelTo   || nd <= bulkDelTo;
+                  return storeOk && fromOk && toOk;
+                }).length;
+              })()}件`
+            ),
+            React.createElement('button', {
+              className: 'btn btn-danger',
+              onClick: () => {
+                const targets = schedules.filter(s => {
+                  const nd = normalizeDate(s.date) || s.date;
+                  const storeOk = !bulkDelStore || s.storeId === bulkDelStore;
+                  const fromOk  = !bulkDelFrom || nd >= bulkDelFrom;
+                  const toOk    = !bulkDelTo   || nd <= bulkDelTo;
+                  return storeOk && fromOk && toOk;
+                });
+                if (targets.length === 0) { alert('削除対象がありません'); return; }
+                const storeLabel = bulkDelStore ? stores.find(s=>s.id===bulkDelStore)?.name : '全店舗';
+                if (confirm(`${storeLabel}・${bulkDelFrom||'開始日なし'}〜${bulkDelTo||'終了日なし'} の ${targets.length}件を削除しますか？`)) {
+                  const ids = new Set(targets.map(s=>s.id));
+                  setSchedules(prev => prev.filter(s => !ids.has(s.id)));
+                }
+              }
+            }, '選択範囲を削除')
+          )
+        )
+      )
+    ),
+    React.createElement('div', { className: 'card mb-12' },
+      React.createElement('div', { className: 'card-title' }, '📂 CSVでスケジュールを一括取り込み'),
+      React.createElement('div', { className: 'alert alert-info', style: { marginBottom: 10 } },
+        React.createElement('div', { style: { fontSize: 12 } }, '列名: 出店日（必須）, 店舗名（必須）, 出店場所, 納品予定日, 代替場所, 代替店舗名'),
+        React.createElement('div', { style: { fontSize: 11, marginTop: 3, color: 'var(--text2)' } }, '日付形式自動判定。Excelシリアル値・スラッシュ区切りも対応。')
+      ),
+      React.createElement(DropZone, {
+        accept: '.csv,.CSV',
+        message: 'クリックまたはCSVファイルをここにドロップ',
+        subMessage: `登録済み: ${schedules.length}件`,
+        status: csvMsg,
+        onFile: (file) => {
+          setCsvMsg('読み込み中...');
+
+          // 文字化け検出：Unicodeの置換文字(\ufffd)が含まれていればShift_JIS
+          function looksGarbled(rows) {
+            if (!rows.length) return true;
+            const sample = Object.keys(rows[0]).join('') + Object.values(rows[0]).join('');
+            return sample.includes('\ufffd') || sample.includes('\u0083') || sample.includes('\u0093');
+          }
+
+          function tryShiftJIS() {
+            Papa.parse(file, {
+              header: true, skipEmptyLines: true, encoding: 'Shift_JIS',
+              complete: (res2) => {
+                if (!res2.data.length) {
+                  setCsvMsg('データが読み取れませんでした。CSVファイルを確認してください。');
+                } else {
+                  processScheduleRows(res2.data);
+                }
+              },
+              error: (err) => setCsvMsg('エラー: ' + err.message)
+            });
+          }
+
+          Papa.parse(file, {
+            header: true, skipEmptyLines: true, encoding: 'UTF-8',
+            complete: (res) => {
+              // UTF-8で読めたが文字化けしている→Shift_JIS再試行
+              if (!res.data.length || looksGarbled(res.data)) {
+                tryShiftJIS();
+              } else {
+                processScheduleRows(res.data);
+              }
+            },
+            error: () => tryShiftJIS()
+          });
+        }
+      }),
+      React.createElement('div', { style: { marginTop: 10 } },
+        React.createElement('button', { className: 'btn btn-secondary btn-sm', onClick: downloadTemplate },
+          '⬇ テンプレートCSVをダウンロード')
+      )
+    ),
+
+    // シフト管理連携カード
+    React.createElement('div', { className: 'card mb-12' },
+      React.createElement('div', { className: 'card-title' }, '🔗 100g COFFEEシフト管理 v3 から読み込み'),
+      React.createElement('div', { className: 'alert alert-info', style: { marginBottom: 10 } },
+        React.createElement('div', { style: { fontSize: 12 } },
+          'シフト管理CSVを読み込み、期間を指定してスケジュールに取り込みます。'
+        ),
+        React.createElement('div', { style: { fontSize: 11, marginTop: 3, color: 'var(--text2)' } },
+          '日付・店舗(号車)・出店場所 の列を自動検出します。'
+        )
+      ),
+      React.createElement('div', { className: 'flex gap-12 items-center mb-12', style: { flexWrap: 'wrap' } },
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '取込開始日'),
+          React.createElement('input', { type: 'date', value: shiftFrom,
+            onChange: e => setShiftFrom(e.target.value), style: { width: 140 } })
+        ),
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '取込終了日'),
+          React.createElement('input', { type: 'date', value: shiftTo,
+            onChange: e => setShiftTo(e.target.value), style: { width: 140 } })
+        ),
+      ),
+      shiftPreview.length > 0 && React.createElement('div', { style: { marginBottom: 10 } },
+        React.createElement('div', { className: 'flex items-center justify-between mb-8' },
+          React.createElement('span', { className: 'text-sm fw-600' },
+            `プレビュー: ${shiftPreview.length}件（期間内）`
+          ),
+          React.createElement('button', {
+            className: 'btn btn-primary btn-sm',
+            onClick: commitShiftImport
+          }, `✅ ${shiftPreview.length}件をスケジュールに取り込む`)
+        ),
+        React.createElement('div', { className: 'scroll-x', style: { maxHeight: 200, overflowY: 'auto' } },
+          React.createElement('table', null,
+            React.createElement('thead', null,
+              React.createElement('tr', null,
+                React.createElement('th', null, '日付'),
+                React.createElement('th', null, '店舗'),
+                React.createElement('th', null, '場所'),
+              )
+            ),
+            React.createElement('tbody', null,
+              shiftPreview.slice(0, 50).map((r, i) => {
+                const store = stores.find(s => s.id === r.storeId);
+                return React.createElement('tr', { key: i },
+                  React.createElement('td', null, fmtDate(r.date)),
+                  React.createElement('td', null, store?.name || r.storeRaw),
+                  React.createElement('td', null, r.location || '-'),
+                );
+              })
+            )
+          )
+        )
+      ),
+      React.createElement(DropZone, {
+        accept: '.csv,.CSV',
+        message: 'シフト管理CSVをドロップまたはクリックして選択',
+        subMessage: 'シフト管理v3のCSVエクスポートファイル',
+        status: shiftMsg,
+        onFile: handleShiftCSV
+      })
+    ),
+
+    // 手動追加/編集モーダル
+    showAdd && React.createElement('div', { className: 'modal-overlay' },
+      React.createElement('div', { className: 'modal' },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, editId ? 'スケジュール編集' : 'スケジュール追加'),
+          React.createElement('button', { className: 'modal-close', onClick: () => setShowAdd(false) }, '✕')
+        ),
+        React.createElement('div', { className: 'form-row' },
+          React.createElement('div', { className: 'form-group', style: { flex: 1 } },
+            React.createElement('label', null, '店舗 *'),
+            React.createElement('select', { value: form.storeId, onChange: e => setForm(f => ({ ...f, storeId: e.target.value })) },
+              stores.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))
+            )
+          ),
+          React.createElement('div', { className: 'form-group', style: { flex: 1 } },
+            React.createElement('label', null, '出店日 *'),
+            React.createElement('input', { type: 'date', value: form.date, onChange: e => setForm(f => ({ ...f, date: e.target.value })) })
+          )
+        ),
+        React.createElement('div', { className: 'form-row' },
+          React.createElement('div', { className: 'form-group', style: { flex: 1 } },
+            React.createElement('label', null, '出店場所'),
+            React.createElement('select', {
+              value: form.location,
+              onChange: e => {
+                const val = e.target.value;
+                if (val === '__custom__') return;
+                setForm(f => ({ ...f, location: val === '__none__' ? '' : val }));
+              },
+              style: { width: '100%' }
+            },
+              React.createElement('option', { value: '' }, '-- 選択してください --'),
+              React.createElement('option', { value: '__none__' }, '【出店なし】'),
+              React.createElement('option', { disabled: true }, '─────────────'),
+              [...new Set(locations)].sort().map(l =>
+                React.createElement('option', { key: l, value: l }, l)
+              ),
+              React.createElement('option', { disabled: true }, '─────────────'),
+              React.createElement('option', { value: '__custom__' }, '▼ 直接入力する場合は下の欄へ')
+            ),
+            React.createElement('input', {
+              type: 'text',
+              value: form.location === '' ? '' : (locations.includes(form.location) ? '' : form.location),
+              placeholder: '一覧にない場合はここに直接入力',
+              style: { marginTop: 4, width: '100%' },
+              onChange: e => setForm(f => ({ ...f, location: e.target.value }))
+            })
+          ),
+          React.createElement('div', { className: 'form-group', style: { flex: 1 } },
+            React.createElement('label', null, '納品予定日'),
+            React.createElement('input', { type: 'date', value: form.deliveryDate, onChange: e => setForm(f => ({ ...f, deliveryDate: e.target.value })) })
+          )
+        ),
+        React.createElement('div', { className: 'card', style: { background: 'var(--surface2)', marginBottom: 12 } },
+          React.createElement('p', { className: 'text-xs mb-8' }, '過去に同じ場所・店舗・曜日のデータがない場合の代替設定'),
+          React.createElement('div', { className: 'form-row' },
+            React.createElement('div', { className: 'form-group', style: { flex: 1 } },
+              React.createElement('label', null, '代替場所'),
+              React.createElement('select', {
+                value: form.altLocation || '',
+                onChange: e => setForm(f => ({ ...f, altLocation: e.target.value === '__none__' ? '' : e.target.value })),
+                style: { width: '100%' }
+              },
+                React.createElement('option', { value: '' }, '-- なし --'),
+                [...new Set(locations)].sort().map(l =>
+                  React.createElement('option', { key: l, value: l }, l)
+                )
+              )
+            ),
+            React.createElement('div', { className: 'form-group', style: { flex: 1 } },
+              React.createElement('label', null, '代替店舗'),
+              React.createElement('select', { value: form.altStoreId, onChange: e => setForm(f => ({ ...f, altStoreId: e.target.value })) },
+                React.createElement('option', { value: '' }, '-- 代替店舗なし --'),
+                stores.filter(s => s.id !== form.storeId).map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))
+              )
+            )
+          )
+        ),
+        React.createElement('div', { className: 'flex gap-8' },
+          React.createElement('button', { className: 'btn btn-primary', onClick: save }, '保存'),
+          React.createElement('button', { className: 'btn btn-secondary', onClick: () => setShowAdd(false) }, 'キャンセル'),
+        )
+      )
+    ),
+
+    React.createElement('div', { className: 'card' },
+      React.createElement('div', { className: 'card-title', style: { marginBottom: 12 } }, `スケジュール一覧 (${displayed.length}件)`),
+      React.createElement('div', { className: 'scroll-x' },
+        React.createElement('table', null,
+          React.createElement('thead', null,
+            React.createElement('tr', null,
+              React.createElement('th', null, '出店日'),
+              React.createElement('th', null, '曜日'),
+              React.createElement('th', null, '店舗'),
+              React.createElement('th', null, '場所'),
+              React.createElement('th', null, '納品予定日'),
+              React.createElement('th', null, '代替場所'),
+              React.createElement('th', null, '操作'),
+            )
+          ),
+          React.createElement('tbody', null,
+            displayed.length === 0
+              ? React.createElement('tr', null, React.createElement('td', { colSpan: 7, className: 'text-center text-sm', style: { padding: 20 } }, 'スケジュールがありません。CSVをアップロードするか手動追加してください。'))
+              : displayed.map(s => {
+                const store = stores.find(st => st.id === s.storeId);
+                const dow = ['日','月','火','水','木','金','土'][dowFromDateStr(s.date)];
+                const isWeekend = [0, 6].includes(dowFromDateStr(s.date));
+                return React.createElement('tr', { key: s.id },
+                  React.createElement('td', null, fmtDate(s.date)),
+                  React.createElement('td', null,
+                    React.createElement('span', { className: `badge ${isWeekend ? 'badge-amber' : 'badge-gray'}` }, dow)
+                  ),
+                  React.createElement('td', null, store?.name || '-'),
+                  React.createElement('td', null, s.location || '-'),
+                  React.createElement('td', null, fmtDate(s.deliveryDate)),
+                  React.createElement('td', null, s.altLocation || '-'),
+                  React.createElement('td', null,
+                    React.createElement('div', { className: 'table-actions' },
+                      React.createElement('button', { className: 'btn btn-icon btn-sm', onClick: () => openEdit(s) }, '✏'),
+                      React.createElement('button', { className: 'btn btn-danger btn-sm', onClick: () => del(s.id) }, '✕'),
+                    )
+                  )
+                );
+              })
+          )
+        )
+      )
+    )
+  );
+}
+
+// ===== 販売予想ページ =====
+function ForecastPage({ schedules, stores, products, salesHistory, productMapping, storeInventory, minStock, setMinStock }) {
+  const [filterStore, setFilterStore] = useState('');
+  const [editOverride, setEditOverride] = useState(null);
+  const [overrides, setOverrides] = useState(() => loadState('forecastOverrides', {}));
+
+  useEffect(() => { saveState('forecastOverrides', overrides); }, [overrides]);
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const upcomingSchedules = useMemo(() =>
+    schedules
+      .map(s => ({ ...s, _nd: normalizeDate(s.date) }))
+      .filter(s => s._nd >= today && (!filterStore || s.storeId === filterStore))
+      .sort((a, b) => a.storeId.localeCompare(b.storeId) || a._nd.localeCompare(b._nd)),
+    [schedules, today, filterStore]
+  );
+
+  // 全予測をまとめてメモ化（最大のボトルネック解消）
+  const forecastCache = useMemo(() => {
+    const cache = {};
+    try {
+      for (const s of upcomingSchedules) {
+        if (!s || !s.id) continue;
+        const base = computeForecast(s, salesHistory, stores, products, productMapping);
+        cache[s.id] = { ...base };
+        const ov = overrides[s.id] || {};
+        for (const [pid, g] of Object.entries(ov)) cache[s.id][pid] = Number(g) || 0;
+      }
+    } catch(e) { console.error('ForecastPage cache error', e); }
+    return cache;
+  }, [upcomingSchedules, salesHistory, stores, products, productMapping, overrides]);
+
+  // 店舗ごとグループ
+  const byStore = useMemo(() => {
+    const map = {};
+    for (const s of upcomingSchedules) {
+      if (!map[s.storeId]) map[s.storeId] = [];
+      map[s.storeId].push(s);
+    }
+    return map;
+  }, [upcomingSchedules]);
+
+  function saveOverride() {
+    if (!editOverride) return;
+    const { scheduleId, productId, value } = editOverride;
+    setOverrides(prev => ({
+      ...prev,
+      [scheduleId]: { ...(prev[scheduleId] || {}), [productId]: parseFloat(value) || 0 }
+    }));
+    setEditOverride(null);
+  }
+
+  // CSV ダウンロード
+  function exportCSV() {
+    const rows = [];
+    for (const [storeId, storeSchedules] of Object.entries(byStore)) {
+      const store = stores.find(s => s.id === storeId);
+      for (const prod of products) {
+        const row = { 店舗: store?.name || storeId, 商品: prod.name };
+        let total = 0;
+        for (const s of storeSchedules) {
+          const v = (forecastCache[s.id] || {})[prod.id] || 0;
+          row[s.date] = v;
+          total += v;
+        }
+        row['合計(g)'] = total;
+        if (total > 0) rows.push(row);
+      }
+    }
+    const csv = Papa.unparse(rows);
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'forecast.csv'; a.click();
+  }
+
+  // 印刷
+  function printForecast() {
+    setTimeout(() => window.print(), 100);
+  }
+
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'page-header' },
+      React.createElement('h2', { className: 'page-title' }, '📈 販売予想'),
+      React.createElement('div', { className: 'flex gap-8 items-center', style: { flexWrap: 'wrap' } },
+        React.createElement('span', { className: 'text-sm' }, '最低在庫:'),
+        React.createElement('input', { type: 'number', value: minStock, style: { width: 80 },
+          onChange: e => setMinStock(parseInt(e.target.value) || 0)
+        }),
+        React.createElement('span', { className: 'text-sm' }, 'g'),
+        React.createElement('select', {
+          value: filterStore, onChange: e => setFilterStore(e.target.value), style: { width: 120 }
+        },
+          React.createElement('option', { value: '' }, '全店舗'),
+          stores.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))
+        ),
+        React.createElement('button', { className: 'btn btn-secondary btn-sm', onClick: exportCSV }, '⬇ CSVダウンロード'),
+        React.createElement('button', { className: 'btn btn-secondary btn-sm no-print', onClick: printForecast }, '🖨 印刷'),
+      )
+    ),
+
+    editOverride && React.createElement('div', { className: 'modal-overlay no-print' },
+      React.createElement('div', { className: 'modal', style: { maxWidth: 360 } },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, '予想値を修正'),
+          React.createElement('button', { className: 'modal-close', onClick: () => setEditOverride(null) }, '✕')
+        ),
+        React.createElement('p', { className: 'text-sm mb-12' },
+          products.find(p => p.id === editOverride.productId)?.name
+        ),
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '販売予想量 (g)'),
+          React.createElement('input', { type: 'number', value: editOverride.value,
+            onChange: e => setEditOverride(prev => ({ ...prev, value: e.target.value }))
+          })
+        ),
+        React.createElement('div', { className: 'flex gap-8 mt-12' },
+          React.createElement('button', { className: 'btn btn-primary', onClick: saveOverride }, '保存'),
+          React.createElement('button', { className: 'btn btn-secondary', onClick: () => setEditOverride(null) }, 'キャンセル'),
+        )
+      )
+    ),
+
+    Object.keys(byStore).length === 0
+      ? React.createElement('div', { className: 'alert alert-info mt-12' }, '出店スケジュールがありません。先にスケジュールを登録してください。')
+      : Object.entries(byStore).map(([storeId, storeSchedules]) => {
+        const store = stores.find(s => s.id === storeId);
+        return React.createElement('div', { key: storeId, className: 'card mt-12' },
+          React.createElement('div', { className: 'card-title' }, `🚐 ${store?.name || storeId}`),
+          React.createElement('div', { className: 'scroll-x' },
+            React.createElement('table', null,
+              React.createElement('thead', null,
+                React.createElement('tr', null,
+                  React.createElement('th', null, '商品'),
+                  ...storeSchedules.map(s => React.createElement('th', { key: s.id, className: 'text-right', style: { minWidth: 90 } },
+                    React.createElement('div', null, fmtDate(s.date)),
+                    React.createElement('div', { className: 'text-xs' }, s.location || '-')
+                  )),
+                  React.createElement('th', { className: 'text-right' }, '合計予想'),
+                )
+              ),
+              React.createElement('tbody', null,
+                products.map(prod => {
+                  const forecasts = storeSchedules.map(s => (forecastCache[s.id] || {})[prod.id] || 0);
+                  const total = forecasts.reduce((a, b) => a + b, 0);
+                  const hasOverride = storeSchedules.some(s => overrides[s.id]?.[prod.id] !== undefined);
+                  if (total === 0 && !hasOverride) return null;
+                  return React.createElement('tr', { key: prod.id },
+                    React.createElement('td', null, prod.limitedLabel
+                      ? React.createElement('span', null,
+                          React.createElement('span', { className: 'badge badge-amber', style: { marginRight: 4 } }, prod.limitedLabel),
+                          prod.name)
+                      : prod.name
+                    ),
+                    ...storeSchedules.map((s, i) => {
+                      const isOverridden = overrides[s.id]?.[prod.id] !== undefined;
+                      return React.createElement('td', { key: s.id, className: 'text-right' },
+                        React.createElement('span', {
+                          className: 'no-print',
+                          style: { cursor: 'pointer', color: isOverridden ? 'var(--accent)' : 'inherit', fontWeight: isOverridden ? 600 : 400 },
+                          onClick: () => setEditOverride({ scheduleId: s.id, productId: prod.id, value: forecasts[i] }),
+                          title: '✏ クリックして修正'
+                        }, forecasts[i].toLocaleString()),
+                        React.createElement('span', { className: 'print-only', style: { display: 'none' } }, forecasts[i].toLocaleString()),
+                        React.createElement('span', { className: 'text-xs' }, 'g')
+                      );
+                    }),
+                    React.createElement('td', { className: 'text-right fw-600' }, total.toLocaleString(), React.createElement('span', { className: 'text-xs' }, 'g'))
+                  );
+                }).filter(Boolean)
+              )
+            )
+          )
+        );
+      })
+  );
+}
+
+// ===== 納品管理ページ =====
+function DeliveryPage({ schedules, stores, products, salesHistory, productMapping, storeInventory, warehouseInventory, deliveries, setDeliveries, minStock }) {
+  const [filterStore, setFilterStore] = useState(''); // '' = 全店舗
+  const today = new Date().toISOString().split('T')[0];
+  const overrides = useMemo(() => { try { return loadState('forecastOverrides', {}); } catch(e) { return {}; } }, []);
+
+  // 全スケジュール予測をメモ化
+  const forecastCache = useMemo(() => {
+    const cache = {};
+    try {
+      for (const s of schedules) {
+        if (!s || !s.id) continue;
+        const base = computeForecast(s, salesHistory, stores, products, productMapping);
+        cache[s.id] = { ...base };
+        const ov = overrides[s.id] || {};
+        for (const [pid, g] of Object.entries(ov)) cache[s.id][pid] = Number(g) || 0;
+      }
+    } catch(e) { console.error('forecastCache error', e); }
+    return cache;
+  }, [schedules, salesHistory, stores, products, productMapping, overrides]);
+
+  // 表示対象の店舗リスト
+  const targetStores = filterStore ? stores.filter(s => s.id === filterStore) : stores;
+
+  // 各店舗の納品データをメモ化
+  const storeDeliveryData = useMemo(() => {
+    const result = {};
+    for (const store of stores) {
+      // 今後のスケジュール（全期間、today以降）
+      const ss = schedules
+        .filter(s => s.storeId === store.id && normalizeDate(s.date) >= today)
+        .sort((a, b) => normalizeDate(a.date).localeCompare(normalizeDate(b.date)));
+      const lastDate = ss.length ? ss[ss.length - 1].date : null;
+      const deliveryDate = ss.find(s => s.deliveryDate)?.deliveryDate || null;
+      const needed = {};
+      for (const prod of products) {
+        let totalForecast = 0;
+        for (const s of ss) totalForecast += (forecastCache[s.id] || {})[prod.id] || 0;
+        const currentStock = (storeInventory[store.id] || {})[prod.id] || 0;
+        const req = Math.max(0, totalForecast + minStock - currentStock);
+        needed[prod.id] = { totalForecast, currentStock, needed: req, bags: Math.ceil(req / BAG_WEIGHT) };
+      }
+      result[store.id] = { ss, lastDate, deliveryDate, needed };
+    }
+    return result;
+  }, [stores, schedules, forecastCache, products, storeInventory, minStock, today]);
+
+  // 全店舗の全商品をまとめた納品一覧（印刷用）
+  // 商品軸×店舗軸のクロス集計
+  const allNeededProducts = products.filter(prod =>
+    stores.some(store => (storeDeliveryData[store.id]?.needed[prod.id]?.bags || 0) > 0)
+  );
+
+  return React.createElement('div', null,
+
+    // ===== 画面表示エリア =====
+    React.createElement('div', { className: 'no-print' },
+      React.createElement('div', { className: 'page-header' },
+        React.createElement('h2', { className: 'page-title' }, '📦 納品管理'),
+        React.createElement('div', { className: 'flex gap-8 items-center', style: { flexWrap: 'wrap' } },
+          React.createElement('select', {
+            value: filterStore, onChange: e => setFilterStore(e.target.value), style: { width: 120 }
+          },
+            React.createElement('option', { value: '' }, '全店舗'),
+            stores.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))
+          ),
+          React.createElement('button', {
+            className: 'btn btn-primary',
+            onClick: () => setTimeout(() => window.print(), 100)
+          }, '🖨 納品指示書を印刷（全店一覧）')
+        )
+      ),
+
+      // 各店舗カード（画面）
+      targetStores.map(store => {
+        const data = storeDeliveryData[store.id] || {};
+        const { ss = [], lastDate, deliveryDate, needed = {} } = data;
+        const hasItems = products.some(p => (needed[p.id]?.bags || 0) > 0);
+        return React.createElement('div', { key: store.id, className: 'card mt-12' },
+          React.createElement('div', { className: 'flex items-center justify-between mb-12', style: { flexWrap: 'wrap', gap: 8 } },
+            React.createElement('div', { className: 'card-title', style: { margin: 0 } }, `🚐 ${store.name}`),
+            React.createElement('div', { className: 'flex gap-16', style: { flexWrap: 'wrap' } },
+              React.createElement('div', null,
+                React.createElement('div', { className: 'text-xs' }, '出店期間終了'),
+                React.createElement('div', { className: 'fw-600', style: { fontSize: 13 } }, lastDate ? fmtDate(lastDate) : '予定なし')
+              ),
+              React.createElement('div', null,
+                React.createElement('div', { className: 'text-xs' }, '納品予定日'),
+                React.createElement('div', { className: 'fw-600', style: { fontSize: 13 } }, deliveryDate ? fmtDate(deliveryDate) : '-')
+              ),
+              React.createElement('div', null,
+                React.createElement('div', { className: 'text-xs' }, '出店日数'),
+                React.createElement('div', { className: 'fw-600', style: { fontSize: 13 } }, ss.length + '日')
+              ),
+            )
+          ),
+          hasItems
+            ? React.createElement('table', null,
+              React.createElement('thead', null,
+                React.createElement('tr', null,
+                  React.createElement('th', null, '商品名'),
+                  React.createElement('th', { className: 'text-right' }, '予想(g)'),
+                  React.createElement('th', { className: 'text-right' }, '現在庫(g)'),
+                  React.createElement('th', { className: 'text-right' }, '必要量(g)'),
+                  React.createElement('th', { className: 'text-right' }, '納品袋数'),
+                  React.createElement('th', { className: 'text-right' }, '納品量(g)'),
+                )
+              ),
+              React.createElement('tbody', null,
+                products.map(prod => {
+                  const d = needed[prod.id];
+                  if (!d || d.bags === 0) return null;
+                  return React.createElement('tr', { key: prod.id },
+                    React.createElement('td', null, prod.limitedLabel ? `${prod.limitedLabel} ${prod.name}` : prod.name),
+                    React.createElement('td', { className: 'text-right' }, d.totalForecast.toLocaleString()),
+                    React.createElement('td', { className: 'text-right' }, d.currentStock.toLocaleString()),
+                    React.createElement('td', { className: 'text-right' }, d.needed.toLocaleString()),
+                    React.createElement('td', { className: 'text-right fw-600', style: { color: 'var(--accent)' } }, d.bags + '袋'),
+                    React.createElement('td', { className: 'text-right' }, (d.bags * BAG_WEIGHT).toLocaleString()),
+                  );
+                }).filter(Boolean)
+              )
+            )
+            : React.createElement('p', { className: 'text-sm', style: { color: 'var(--text2)' } },
+                ss.length === 0 ? '出店予定がありません' : '納品不要（現在庫で充足）'
+              )
+        );
+      })
+    ),
+
+    // ===== 印刷専用エリア：A4縦1枚・全店舗一覧帳票 =====
+    React.createElement('div', { className: 'print-only', style: { display: 'none' } },
+      // タイトル・作成日
+      React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 } },
+        React.createElement('h2', { style: { fontSize: '16pt', fontWeight: 700, margin: 0 } }, '納品指示書'),
+        React.createElement('span', { style: { fontSize: '10pt' } }, `作成日: ${today}　最低在庫: ${minStock.toLocaleString()}g`)
+      ),
+
+      // 店舗ヘッダー情報（各店の出店終了・納品予定日）
+      React.createElement('table', {
+        style: { width: '100%', borderCollapse: 'collapse', marginBottom: 10, fontSize: '9pt' }
+      },
+        React.createElement('thead', null,
+          React.createElement('tr', null,
+            React.createElement('th', { style: { border: '1px solid #888', padding: '3px 6px', background: '#f0ece8', textAlign: 'left', whiteSpace: 'nowrap' } }, ''),
+            ...stores.map(store =>
+              React.createElement('th', { key: store.id, style: { border: '1px solid #888', padding: '3px 6px', background: '#f0ece8', textAlign: 'center', whiteSpace: 'nowrap' } },
+                store.name
+              )
+            )
+          )
+        ),
+        React.createElement('tbody', null,
+          React.createElement('tr', null,
+            React.createElement('td', { style: { border: '1px solid #888', padding: '3px 6px', background: '#faf8f5', fontWeight: 600, whiteSpace: 'nowrap' } }, '出店期間終了'),
+            ...stores.map(store => {
+              const ld = storeDeliveryData[store.id]?.lastDate;
+              return React.createElement('td', { key: store.id, style: { border: '1px solid #888', padding: '3px 6px', textAlign: 'center', fontSize: '8pt', whiteSpace: 'nowrap' } },
+                ld ? fmtDate(ld) : '-'
+              );
+            })
+          ),
+          React.createElement('tr', null,
+            React.createElement('td', { style: { border: '1px solid #888', padding: '3px 6px', background: '#faf8f5', fontWeight: 600, whiteSpace: 'nowrap' } }, '納品予定日'),
+            ...stores.map(store => {
+              const dd = storeDeliveryData[store.id]?.deliveryDate;
+              return React.createElement('td', { key: store.id, style: { border: '1px solid #888', padding: '3px 6px', textAlign: 'center', fontSize: '8pt', whiteSpace: 'nowrap' } },
+                dd ? fmtDate(dd) : '-'
+              );
+            })
+          ),
+          React.createElement('tr', null,
+            React.createElement('td', { style: { border: '1px solid #888', padding: '3px 6px', background: '#faf8f5', fontWeight: 600 } }, '出店日数'),
+            ...stores.map(store => {
+              const cnt = storeDeliveryData[store.id]?.ss?.length || 0;
+              return React.createElement('td', { key: store.id, style: { border: '1px solid #888', padding: '3px 6px', textAlign: 'center', fontSize: '8pt' } },
+                cnt + '日'
+              );
+            })
+          )
+        )
+      ),
+
+      // 商品×店舗 クロス集計表（納品袋数メイン）
+      React.createElement('table', {
+        style: { width: '100%', borderCollapse: 'collapse', fontSize: '9pt', tableLayout: 'fixed' }
+      },
+        React.createElement('thead', null,
+          React.createElement('tr', null,
+            React.createElement('th', { style: { border: '1px solid #888', padding: '4px 6px', background: '#f0ece8', textAlign: 'left', width: '22%' } }, '商品名'),
+            ...stores.map(store =>
+              React.createElement('th', { key: store.id, style: { border: '1px solid #888', padding: '4px 4px', background: '#f0ece8', textAlign: 'center', fontSize: '8pt' } },
+                store.name
+              )
+            ),
+            React.createElement('th', { style: { border: '1px solid #888', padding: '4px 4px', background: '#e8f2fb', textAlign: 'center', fontSize: '8pt', fontWeight: 700 } }, '合計袋')
+          )
+        ),
+        React.createElement('tbody', null,
+          products.map((prod, pi) => {
+            const storeBags = stores.map(store => storeDeliveryData[store.id]?.needed[prod.id]?.bags || 0);
+            const totalBags = storeBags.reduce((a, b) => a + b, 0);
+            const rowBg = pi % 2 === 0 ? '#fff' : '#fafaf8';
+            return React.createElement('tr', { key: prod.id, style: { background: rowBg } },
+              React.createElement('td', { style: { border: '1px solid #ccc', padding: '4px 6px', fontSize: '8.5pt', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
+                prod.limitedLabel ? `${prod.limitedLabel}${prod.name}` : prod.name
+              ),
+              ...stores.map((store, si) => {
+                const bags = storeBags[si];
+                return React.createElement('td', { key: store.id,
+                  style: {
+                    border: '1px solid #ccc', padding: '4px 4px', textAlign: 'center', fontSize: '9pt',
+                    fontWeight: bags > 0 ? 700 : 400,
+                    color: bags > 0 ? '#6b3d1e' : '#bbb',
+                    background: bags > 0 ? '#fdf3ec' : rowBg
+                  }
+                }, bags > 0 ? bags + '袋' : '-');
+              }),
+              React.createElement('td', { style: {
+                border: '1px solid #888', padding: '4px 4px', textAlign: 'center', fontSize: '9pt',
+                fontWeight: 700, background: totalBags > 0 ? '#e8f2fb' : '#f5f5f5',
+                color: totalBags > 0 ? '#185fa5' : '#bbb'
+              } }, totalBags > 0 ? totalBags + '袋' : '-')
+            );
+          })
+        )
+      ),
+
+      React.createElement('div', { style: { marginTop: 8, fontSize: '8pt', color: '#888', borderTop: '1px solid #ccc', paddingTop: 4 } },
+        `1袋 = ${BAG_WEIGHT.toLocaleString()}g　／　最低在庫 ${minStock.toLocaleString()}g を含む`
+      )
+    )
+  );
+}
+
+// ===== 焙煎管理ページ =====
+function RoastingPage({ products, stores, schedules, salesHistory, productMapping, storeInventory, warehouseInventory, setWarehouseInventory, minStock }) {
+  const today = new Date().toISOString().split('T')[0];
+  const overrides = useMemo(() => { try { return loadState('forecastOverrides', {}); } catch(e) { return {}; } }, []);
+
+  // 全スケジュール予測をメモ化
+  const forecastCache = useMemo(() => {
+    const cache = {};
+    try {
+      for (const s of schedules) {
+        if (!s || !s.id) continue;
+        const base = computeForecast(s, salesHistory, stores, products, productMapping);
+        cache[s.id] = { ...base };
+        const ov = overrides[s.id] || {};
+        for (const [pid, g] of Object.entries(ov)) cache[s.id][pid] = Number(g) || 0;
+      }
+    } catch(e) { console.error('roast forecastCache error', e); }
+    return cache;
+  }, [schedules, salesHistory, stores, products, productMapping, overrides]);
+
+  // 全店舗の必要袋数合計をメモ化
+  const roastPlan = useMemo(() => {
+    try {
+      const totalNeeded = {};
+      for (const store of stores) {
+        const ss = schedules.filter(s => s.storeId === store.id && s.date >= today);
+        for (const prod of products) {
+          let totalForecast = 0;
+          for (const s of ss) totalForecast += (forecastCache[s.id] || {})[prod.id] || 0;
+          const currentStock = (storeInventory[store.id] || {})[prod.id] || 0;
+          const needed = Math.max(0, totalForecast + minStock - currentStock);
+          totalNeeded[prod.id] = (totalNeeded[prod.id] || 0) + Math.ceil(needed / BAG_WEIGHT);
+        }
+      }
+      return products.map(prod => {
+        const totalBags = totalNeeded[prod.id] || 0;
+        const whStock = (warehouseInventory[prod.id] || 0) / BAG_WEIGHT;
+        const netBags = Math.max(0, totalBags - Math.floor(whStock));
+        const batches = Math.ceil(netBags / BATCH_BAGS);
+        const roastedBags = batches * BATCH_BAGS;
+        return { prod, totalBags, whStockBags: Math.floor(whStock), netBags, batches, roastedBags, excessBags: roastedBags - netBags };
+      }).filter(r => r.batches > 0);
+    } catch(e) { console.error('roastPlan error', e); return []; }
+  }, [stores, schedules, forecastCache, products, storeInventory, warehouseInventory, minStock, today]);
+
+  function printOrder() {
+    const win = window.open('', '_blank');
+    const rows = roastPlan.map(r => `
+      <tr>
+        <td style="padding:8px 12px;border:1px solid #ccc;">${r.prod.greenBeanName}</td>
+        <td style="padding:8px 12px;border:1px solid #ccc;text-align:right;">${r.batches} バッチ(袋詰)</td>
+      </tr>
+    `).join('');
+    win.document.write(`
+      <!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+      <title>焙煎注文書</title>
+      <style>
+        body{font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;padding:32px;font-size:13pt;}
+        h1{font-size:18pt;margin-bottom:8px;}
+        p{margin-bottom:16px;font-size:11pt;color:#555;}
+        table{border-collapse:collapse;width:100%;}
+        th{background:#f0ece8;padding:8px 12px;border:1px solid #ccc;text-align:left;font-size:13pt;}
+        td{font-size:13pt;}
+      </style></head><body>
+      <h1>焙煎注文書</h1>
+      <p>作成日: ${today}</p>
+      <table><thead><tr>
+        <th>商品名</th><th>数量</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+      </body></html>
+    `);
+    win.document.close();
+    win.print();
+  }
+
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'page-header' },
+      React.createElement('h2', { className: 'page-title' }, '☕ 焙煎管理'),
+      React.createElement('button', { className: 'btn btn-primary', onClick: printOrder }, '🖨 焙煎注文書を印刷')
+    ),
+
+    React.createElement('div', { className: 'alert alert-info mb-12' },
+      `1バッチ = 生豆25kg → 焙煎豆${BATCH_BAGS}袋(各${(BAG_WEIGHT/1000)}kg = ${BATCH_WEIGHT/1000}kg)。余りが出るよう切り上げ計算。`
+    ),
+
+    React.createElement('div', { className: 'card' },
+      React.createElement('div', { className: 'card-title' }, '焙煎計画'),
+      React.createElement('div', { className: 'scroll-x' },
+        React.createElement('table', null,
+          React.createElement('thead', null,
+            React.createElement('tr', null,
+              React.createElement('th', null, '商品名'),
+              React.createElement('th', null, '生豆名'),
+              React.createElement('th', { className: 'text-right' }, '必要袋数'),
+              React.createElement('th', { className: 'text-right' }, '会社在庫(袋)'),
+              React.createElement('th', { className: 'text-right' }, '追加必要(袋)'),
+              React.createElement('th', { className: 'text-right', style: { color: 'var(--accent)' } }, '焙煎バッチ数'),
+              React.createElement('th', { className: 'text-right' }, '焙煎後袋数'),
+              React.createElement('th', { className: 'text-right' }, '余剰(袋)'),
+            )
+          ),
+          React.createElement('tbody', null,
+            roastPlan.length === 0
+              ? React.createElement('tr', null, React.createElement('td', { colSpan: 8, className: 'text-center text-sm' }, '焙煎予定なし'))
+              : roastPlan.map(r => React.createElement('tr', { key: r.prod.id },
+                React.createElement('td', null, r.prod.name),
+                React.createElement('td', null, React.createElement('span', { className: 'badge badge-gray' }, r.prod.greenBeanName)),
+                React.createElement('td', { className: 'text-right' }, r.totalBags),
+                React.createElement('td', { className: 'text-right' }, r.whStockBags),
+                React.createElement('td', { className: 'text-right' }, r.netBags),
+                React.createElement('td', { className: 'text-right fw-600', style: { color: 'var(--accent)', fontSize: 16 } },
+                  r.batches, React.createElement('span', { className: 'text-xs' }, ' バッチ')
+                ),
+                React.createElement('td', { className: 'text-right' }, r.roastedBags),
+                React.createElement('td', { className: 'text-right' },
+                  React.createElement('span', { className: `badge ${r.excessBags > 0 ? 'badge-green' : 'badge-gray'}` }, r.excessBags + '袋')
+                ),
+              ))
+          )
+        )
+      )
+    ),
+
+    React.createElement('div', { className: 'card mt-16' },
+      React.createElement('div', { className: 'card-title' }, '会社倉庫在庫（修正）'),
+      React.createElement('div', { className: 'grid-3' },
+        products.map(prod => React.createElement('div', { key: prod.id, className: 'form-group' },
+          React.createElement('label', null, prod.name),
+          React.createElement('div', { className: 'flex gap-8 items-center' },
+            React.createElement('input', { type: 'number', style: { width: 100 },
+              value: warehouseInventory[prod.id] || 0,
+              onChange: e => setWarehouseInventory(prev => ({ ...prev, [prod.id]: parseInt(e.target.value) || 0 }))
+            }),
+            React.createElement('span', { className: 'text-xs' }, 'g')
+          )
+        ))
+      )
+    )
+  );
+}
+
+// ===== 在庫CSVアップロード処理 =====
+// 商品名を柔軟にマッチング（全角スペース・表記ゆれ対応）
+function matchProductByName(csvName, products, productMapping) {
+  if (!csvName) return null;
+  // normalizeStr で完全正規化（全角スペース・小文字カタカナ含む）
+  const clean = normalizeStr(csvName);
+  // 既存マッピングで照合
+  for (const [mappedCsv, pid] of Object.entries(productMapping)) {
+    if (normalizeStr(mappedCsv) === clean) return products.find(p => p.id === pid) || null;
+  }
+  // 商品名と正規化して完全一致チェック
+  const exactMatch = products.find(p => normalizeStr(p.name) === clean);
+  if (exactMatch) return exactMatch;
+  // productNameMatch で照合（normalizeStr適用済みの文字列で比較）
+  let best = 0, bestProd = null;
+  for (const p of products) {
+    // normalizeStrした上でスコアリング
+    const score = productNameMatch(clean, normalizeStr(p.name));
+    if (score > best) { best = score; bestProd = p; }
+  }
+  if (best >= 0.3 && bestProd) return bestProd;
+  return null;
+}
+
+// ===== 在庫数値入力コンポーネント（0クリア・Enter移動） =====
+function InvNumInput({ value, onCommit, groupId }) {
+  // uncontrolled-likeに扱い、フォーカス時だけ0を空欄にする
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (ref.current) ref.current.value = value === 0 ? '' : String(value);
+  }, [value]);
+
+  function handleFocus() {
+    const el = ref.current;
+    if (!el) return;
+    if (Number(el.value) === 0 || el.value === '') el.value = '';
+    else el.select();
+  }
+
+  function handleBlur() {
+    const el = ref.current;
+    if (!el) return;
+    const num = parseInt(el.value) || 0;
+    el.value = num === 0 ? '' : String(num);
+    onCommit(num);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const num = parseInt(el.value) || 0;
+    el.value = num === 0 ? '' : String(num);
+    onCommit(num);
+    // 同じ group-id グループ内の次のinputへ移動
+    const all = Array.from(document.querySelectorAll(`input[data-invgroup="${groupId}"]`));
+    const idx = all.indexOf(el);
+    if (idx >= 0 && idx < all.length - 1) all[idx + 1].focus();
+  }
+
+  return React.createElement('input', {
+    ref,
+    type: 'number',
+    'data-invgroup': groupId,
+    style: { width: 100 },
+    placeholder: '0',
+    defaultValue: value === 0 ? '' : String(value),
+    onFocus: handleFocus,
+    onBlur: handleBlur,
+    onKeyDown: handleKeyDown,
+  });
+}
+
+// ===== 在庫管理ページ =====
+function InventoryPage({ products, stores, storeInventory, setStoreInventory, warehouseInventory, setWarehouseInventory, productMapping }) {
+  const [tab, setTab] = useState('store');
+  const [inventoryDates, setInventoryDates] = useState(() => loadState('inventoryDates', {}));
+  const [csvMsg, setCsvMsg] = useState('');
+  const [unmatchedInv, setUnmatchedInv] = useState([]); // [{csvName, storeId, g}]
+  const [showInvMapping, setShowInvMapping] = useState(false);
+  const [invTempMapping, setInvTempMapping] = useState({}); // {idx: productId}
+
+  useEffect(() => { saveState('inventoryDates', inventoryDates); }, [inventoryDates]);
+
+  function setDate(key, val) {
+    setInventoryDates(prev => ({ ...prev, [key]: val }));
+  }
+
+  // 在庫CSVアップロード処理
+  function handleInventoryCSV(file) {
+    setCsvMsg('読み込み中...');
+
+    function looksGarbled(rows) {
+      if (!rows.length) return true;
+      const sample = Object.keys(rows[0]).join('') + Object.values(rows[0]).join('');
+      return sample.includes('\ufffd');
+    }
+
+    function processInvRows(rows, enc) {
+      if (!rows.length) { setCsvMsg('データが読み取れませんでした'); return; }
+      const cols = Object.keys(rows[0]);
+
+      // 列名を柔軟に解決
+      function col(keys) {
+        for (const k of keys) {
+          const found = cols.find(c => c.replace(/　/g,' ').trim() === k || c.includes(k));
+          if (found) return found;
+        }
+        return null;
+      }
+      const dateCol  = col(['日付','date','Date']);
+      const storeCol = col(['店舗','店舗名','車両','号車']);
+      const prodCol  = col(['商品名','商品']);
+      const gCol     = col(['在庫値(g)','在庫(g)','在庫g','在庫値','在庫量','g']);
+
+      if (!prodCol || !gCol) {
+        setCsvMsg(`列名が見つかりません。CSV列名: ${cols.join(', ')}`);
+        return;
+      }
+
+      // 店舗マッチング
+      function matchStore(val) {
+        if (!val) return null;
+        const ns = normalizeStr(val);
+        let m = stores.find(s => normalizeStr(s.name) === ns);
+        if (m) return m;
+        m = stores.find(s => { const sn=normalizeStr(s.name); return ns.includes(sn)||sn.includes(ns); });
+        if (m) return m;
+        const num = val.replace(/[^0-9]/g,'');
+        if (num) { m = stores.find(s => normalizeStr(s.name).replace(/[^0-9]/g,'')===num); if(m) return m; }
+        // 「倉庫」「会社」「本社」は warehouse
+        if (/倉庫|会社|本社|warehouse/i.test(val)) return { id: '__warehouse__', name: '会社倉庫' };
+        return null;
+      }
+
+      // 棚卸日を自動設定（最新の日付を使う）
+      const dates = rows.map(r => dateCol ? normalizeDate(String(r[dateCol]||'')) : null).filter(Boolean);
+      const latestDate = dates.length ? dates.sort().reverse()[0] : null;
+
+      const newStoreInv = {}; // {storeId: {productId: g}}
+      let newWarehouseInv = {};
+      const unmatched = [];
+      let matched = 0, skip = 0;
+
+      for (const row of rows) {
+        const storeVal = storeCol ? String(row[storeCol]||'').trim() : '';
+        const prodVal  = String(row[prodCol]||'').trim();
+        const gVal     = parseFloat(String(row[gCol]||'0').replace(/[^\d.]/g,'')) || 0;
+        if (!prodVal) { skip++; continue; }
+
+        const store = matchStore(storeVal);
+        const prod  = matchProductByName(prodVal, products, productMapping);
+
+        if (!prod) {
+          unmatched.push({ csvName: prodVal, storeId: store?.id || storeVal, gVal });
+          skip++;
+          continue;
+        }
+
+        if (store?.id === '__warehouse__') {
+          newWarehouseInv[prod.id] = gVal;
+        } else if (store) {
+          if (!newStoreInv[store.id]) newStoreInv[store.id] = {};
+          newStoreInv[store.id][prod.id] = gVal;
+          // 棚卸日を設定
+          if (latestDate) {
+            setInventoryDates(prev => ({ ...prev, ['store_' + store.id]: latestDate }));
+          }
+        } else {
+          // 店舗不明でも商品が取れた場合はスキップ
+          skip++;
+          continue;
+        }
+        matched++;
+      }
+
+      // 在庫を更新（CSVの店舗だけ上書き、他は維持）
+      // 在庫を上書き更新（CSVに含まれる店舗の在庫は丸ごと差し替え、含まれない店舗はそのまま）
+      if (Object.keys(newStoreInv).length > 0) {
+        setStoreInventory(prev => {
+          const updated = { ...prev };
+          for (const [sid, items] of Object.entries(newStoreInv)) {
+            // その店舗の全商品を items で完全上書き（加算しない）
+            updated[sid] = items;
+          }
+          return updated;
+        });
+      }
+      if (Object.keys(newWarehouseInv).length > 0) {
+        // 会社倉庫も完全上書き
+        setWarehouseInventory(newWarehouseInv);
+      }
+
+      let msg = `完了: ${matched}件反映`;
+      if (skip > 0) msg += `、${skip}件スキップ`;
+      if (unmatched.length > 0) msg += `（商品名不明 ${unmatched.length}件）`;
+      msg += ` [${enc}]`;
+      setCsvMsg(msg);
+
+      if (unmatched.length > 0) {
+        setUnmatchedInv(unmatched);
+        setInvTempMapping({});
+        setShowInvMapping(true);
+      }
+    }
+
+    function tryShiftJIS() {
+      Papa.parse(file, { header:true, skipEmptyLines:true, encoding:'Shift_JIS',
+        complete: r => processInvRows(r.data, 'Shift_JIS'),
+        error: err => setCsvMsg('エラー: ' + err.message)
+      });
+    }
+    Papa.parse(file, { header:true, skipEmptyLines:true, encoding:'UTF-8',
+      complete: r => { if(!r.data.length || looksGarbled(r.data)) tryShiftJIS(); else processInvRows(r.data,'UTF-8'); },
+      error: () => tryShiftJIS()
+    });
+  }
+
+  // 未照合商品のマッピング適用
+  function applyInvMapping() {
+    const newSI = { ...storeInventory };
+    const newWH = { ...warehouseInventory };
+    unmatchedInv.forEach((item, i) => {
+      const pid = invTempMapping[i];
+      if (!pid) return;
+      if (item.storeId === '__warehouse__') {
+        newWH[pid] = item.gVal;
+      } else {
+        const store = stores.find(s => s.id === item.storeId);
+        if (store) {
+          if (!newSI[store.id]) newSI[store.id] = {};
+          newSI[store.id][pid] = item.gVal;
+        }
+      }
+    });
+    setStoreInventory(newSI);
+    setWarehouseInventory(newWH);
+    setShowInvMapping(false);
+    setCsvMsg(prev => prev + '（手動マッピング適用済み）');
+  }
+
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'page-header' },
+      React.createElement('h2', { className: 'page-title' }, '🏪 在庫管理')
+    ),
+
+    // 未照合商品マッピングモーダル
+    showInvMapping && React.createElement('div', { className: 'modal-overlay' },
+      React.createElement('div', { className: 'modal' },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, '⚠ 商品名の手動割り当て'),
+          React.createElement('button', { className: 'modal-close', onClick: () => setShowInvMapping(false) }, '✕')
+        ),
+        React.createElement('p', { className: 'text-sm mb-12' }, 'CSV内の商品名が自動照合できませんでした。対応商品を選んでください。'),
+        unmatchedInv.map((item, i) =>
+          React.createElement('div', { key: i, className: 'form-group mb-12' },
+            React.createElement('label', null,
+              `CSV「${item.csvName}」 / ${stores.find(s=>s.id===item.storeId)?.name||item.storeId} / ${item.gVal.toLocaleString()}g`
+            ),
+            React.createElement('select', {
+              value: invTempMapping[i] || '',
+              onChange: e => setInvTempMapping(prev => ({ ...prev, [i]: e.target.value })),
+              style: { width: '100%' }
+            },
+              React.createElement('option', { value: '' }, '-- スキップ --'),
+              products.map(p => React.createElement('option', { key: p.id, value: p.id }, p.name))
+            )
+          )
+        ),
+        React.createElement('div', { className: 'flex gap-8 mt-16' },
+          React.createElement('button', { className: 'btn btn-primary', onClick: applyInvMapping }, '適用'),
+          React.createElement('button', { className: 'btn btn-secondary', onClick: () => setShowInvMapping(false) }, 'スキップして閉じる'),
+        )
+      )
+    ),
+
+    // CSVアップロードカード
+    React.createElement('div', { className: 'card mb-12' },
+      React.createElement('div', { className: 'card-title' }, '📂 在庫CSVをアップロード'),
+      React.createElement('div', { className: 'alert alert-info', style: { marginBottom: 10 } },
+        React.createElement('div', { style: { fontSize: 12 } }, '列名: 日付, 店舗（または「倉庫」「会社」）, 商品名, 在庫値(g)'),
+        React.createElement('div', { style: { fontSize: 11, marginTop: 3, color: 'var(--text2)' } }, '店舗名は登録済み店舗と自動照合。商品名は表記ゆれも自動補正します。')
+      ),
+      React.createElement(DropZone, {
+        accept: '.csv,.CSV',
+        message: 'クリックまたは在庫CSVをここにドロップ',
+        subMessage: '列: 日付, 店舗, 商品名, 在庫値(g)',
+        status: csvMsg,
+        onFile: handleInventoryCSV
+      })
+    ),
+
+    React.createElement('div', { className: 'tabs' },
+      React.createElement('div', { className: 'tab' + (tab === 'store' ? ' active' : ''), onClick: () => setTab('store') }, '各店在庫'),
+      React.createElement('div', { className: 'tab' + (tab === 'warehouse' ? ' active' : ''), onClick: () => setTab('warehouse') }, '会社倉庫在庫'),
+    ),
+
+    tab === 'store' && React.createElement('div', null,
+      React.createElement('div', { className: 'alert alert-info mb-12' },
+        '各店の在庫量(g)を入力し、棚卸日を記録してください。Enterキーで次の欄に移動できます。'
+      ),
+      stores.map(store => {
+        const dateKey = 'store_' + store.id;
+        return React.createElement('div', { key: store.id, className: 'card mt-12' },
+          React.createElement('div', { className: 'flex items-center justify-between mb-12' },
+            React.createElement('div', { className: 'card-title', style: { margin: 0 } }, `🚐 ${store.name}`),
+            React.createElement('div', { className: 'flex items-center gap-8', style: { flexWrap: 'wrap' } },
+              React.createElement('label', { style: { fontSize: 12, color: 'var(--text2)', whiteSpace: 'nowrap' } }, '棚卸日:'),
+              React.createElement('input', {
+                type: 'date',
+                style: { width: 140 },
+                value: inventoryDates[dateKey] || '',
+                onChange: e => setDate(dateKey, e.target.value)
+              }),
+              inventoryDates[dateKey] && React.createElement('span', { className: 'badge badge-green' }, '記録済'),
+              React.createElement('button', {
+                className: 'btn btn-danger btn-sm',
+                onClick: () => {
+                  if (confirm(`${store.name}の在庫データをすべて削除しますか？`)) {
+                    setStoreInventory(prev => {
+                      const updated = { ...prev };
+                      delete updated[store.id];
+                      return updated;
+                    });
+                    setInventoryDates(prev => {
+                      const updated = { ...prev };
+                      delete updated[dateKey];
+                      return updated;
+                    });
+                  }
+                }
+              }, '在庫削除')
+            )
+          ),
+          React.createElement('div', { className: 'grid-3' },
+            products.map(prod => React.createElement('div', { key: prod.id, className: 'form-group' },
+              React.createElement('label', null, prod.name),
+              React.createElement('div', { className: 'flex gap-8 items-center' },
+                React.createElement(InvNumInput, {
+                  value: (storeInventory[store.id] || {})[prod.id] || 0,
+                  groupId: store.id,
+                  onCommit: num => setStoreInventory(prev => ({
+                    ...prev,
+                    [store.id]: { ...(prev[store.id] || {}), [prod.id]: num }
+                  }))
+                }),
+                React.createElement('span', { className: 'text-xs' }, 'g')
+              )
+            ))
+          )
+        );
+      })
+    ),
+
+    tab === 'warehouse' && React.createElement('div', null,
+      React.createElement('div', { className: 'alert alert-info mb-12' },
+        '会社倉庫の在庫量(g)を入力してください。Enterキーで次の欄に移動できます。'
+      ),
+      React.createElement('div', { className: 'card' },
+        React.createElement('div', { className: 'flex items-center justify-between mb-16' },
+          React.createElement('div', { className: 'flex items-center gap-8' },
+            React.createElement('label', { style: { fontSize: 12, color: 'var(--text2)', whiteSpace: 'nowrap' } }, '棚卸日:'),
+            React.createElement('input', {
+              type: 'date',
+              style: { width: 140 },
+              value: inventoryDates['warehouse'] || '',
+              onChange: e => setDate('warehouse', e.target.value)
+            }),
+            inventoryDates['warehouse'] && React.createElement('span', { className: 'badge badge-green' }, '記録済')
+          ),
+          React.createElement('button', {
+            className: 'btn btn-danger btn-sm',
+            onClick: () => {
+              if (confirm('会社倉庫の在庫データをすべて削除しますか？')) {
+                setWarehouseInventory({});
+                setInventoryDates(prev => {
+                  const updated = { ...prev };
+                  delete updated['warehouse'];
+                  return updated;
+                });
+              }
+            }
+          }, '在庫削除')
+        ),
+        React.createElement('div', { className: 'grid-3' },
+          products.map(prod => React.createElement('div', { key: prod.id, className: 'form-group' },
+            React.createElement('label', null, prod.name),
+            React.createElement('div', { className: 'flex gap-8 items-center' },
+              React.createElement(InvNumInput, {
+                value: warehouseInventory[prod.id] || 0,
+                groupId: 'warehouse',
+                onCommit: num => setWarehouseInventory(prev => ({ ...prev, [prod.id]: num }))
+              }),
+              React.createElement('span', { className: 'text-xs' }, 'g')
+            )
+          ))
+        )
+      )
+    )
+  );
+}
+
+// ===== 商品設定ページ =====
+function ProductsPage({ products, setProducts }) {
+  const [editId, setEditId] = useState(null);
+  const [form, setForm] = useState({});
+  const [dragIdx, setDragIdx] = useState(null);
+
+  function openEdit(p) { setForm({ ...p }); setEditId(p.id); }
+
+  function save() {
+    setProducts(prev => prev.map(p => p.id === editId ? { ...form } : p));
+    setEditId(null);
+  }
+
+  function addProduct() {
+    const newP = { id: generateId(), name: '新商品', greenBeanName: '', limitedType: null, limitedLabel: '' };
+    setProducts(prev => [...prev, newP]);
+  }
+
+  function del(id) {
+    if (confirm('この商品を削除しますか？')) setProducts(prev => prev.filter(p => p.id !== id));
+  }
+
+  // ドラッグ並び替え
+  function onDragStart(idx) { setDragIdx(idx); }
+  function onDragOver(e, idx) {
+    e.preventDefault();
+    if (dragIdx === null || dragIdx === idx) return;
+    const arr = [...products];
+    const [moved] = arr.splice(dragIdx, 1);
+    arr.splice(idx, 0, moved);
+    setProducts(arr);
+    setDragIdx(idx);
+  }
+
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'page-header' },
+      React.createElement('h2', { className: 'page-title' }, '⚙️ 商品設定'),
+      React.createElement('button', { className: 'btn btn-primary', onClick: addProduct }, '+ 商品追加')
+    ),
+    React.createElement('div', { className: 'alert alert-info mb-12' }, '行をドラッグして並び替えができます。'),
+
+    editId && React.createElement('div', { className: 'modal-overlay' },
+      React.createElement('div', { className: 'modal', style: { maxWidth: 460 } },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, '商品を編集'),
+          React.createElement('button', { className: 'modal-close', onClick: () => setEditId(null) }, '✕')
+        ),
+        React.createElement('div', { className: 'form-group mb-12' },
+          React.createElement('label', null, '商品名 *'),
+          React.createElement('input', { type: 'text', value: form.name, onChange: e => setForm(f => ({ ...f, name: e.target.value })) })
+        ),
+        React.createElement('div', { className: 'form-group mb-12' },
+          React.createElement('label', null, '使用する生豆名'),
+          React.createElement('input', { type: 'text', value: form.greenBeanName, onChange: e => setForm(f => ({ ...f, greenBeanName: e.target.value })) })
+        ),
+        React.createElement('div', { className: 'form-group mb-12' },
+          React.createElement('label', null, '期間限定区分'),
+          React.createElement('select', { value: form.limitedType || '', onChange: e => setForm(f => ({ ...f, limitedType: e.target.value || null })) },
+            React.createElement('option', { value: '' }, 'なし'),
+            React.createElement('option', { value: 'limited1' }, '期間限定①'),
+            React.createElement('option', { value: 'limited2' }, '期間限定②'),
+          )
+        ),
+        form.limitedType && React.createElement('div', { className: 'form-group mb-12' },
+          React.createElement('label', null, '期間限定ラベル'),
+          React.createElement('input', { type: 'text', value: form.limitedLabel || '', onChange: e => setForm(f => ({ ...f, limitedLabel: e.target.value })) })
+        ),
+        React.createElement('div', { className: 'flex gap-8' },
+          React.createElement('button', { className: 'btn btn-primary', onClick: save }, '保存'),
+          React.createElement('button', { className: 'btn btn-secondary', onClick: () => setEditId(null) }, 'キャンセル'),
+        )
+      )
+    ),
+
+    React.createElement('div', { className: 'card' },
+      React.createElement('table', null,
+        React.createElement('thead', null,
+          React.createElement('tr', null,
+            React.createElement('th', { style: { width: 30 } }, ''),
+            React.createElement('th', null, '商品名'),
+            React.createElement('th', null, '生豆名'),
+            React.createElement('th', null, '期間限定'),
+            React.createElement('th', null, '操作'),
+          )
+        ),
+        React.createElement('tbody', null,
+          products.map((p, idx) => React.createElement('tr', {
+            key: p.id,
+            draggable: true,
+            onDragStart: () => onDragStart(idx),
+            onDragOver: (e) => onDragOver(e, idx),
+            onDragEnd: () => setDragIdx(null),
+          },
+            React.createElement('td', null, React.createElement('span', { className: 'drag-handle' }, '⠿')),
+            React.createElement('td', null, p.limitedLabel
+              ? React.createElement('span', null, React.createElement('span', { className: 'badge badge-amber', style: { marginRight: 4 } }, p.limitedLabel), p.name)
+              : p.name
+            ),
+            React.createElement('td', null, React.createElement('span', { className: 'badge badge-gray' }, p.greenBeanName)),
+            React.createElement('td', null, p.limitedType
+              ? React.createElement('span', { className: 'badge badge-amber' }, p.limitedType === 'limited1' ? '①' : '②')
+              : React.createElement('span', { className: 'text-xs' }, '-')
+            ),
+            React.createElement('td', null,
+              React.createElement('div', { className: 'table-actions' },
+                React.createElement('button', { className: 'btn btn-icon btn-sm', onClick: () => openEdit(p) }, '✏'),
+                React.createElement('button', { className: 'btn btn-danger btn-sm', onClick: () => del(p.id) }, '✕'),
+              )
+            )
+          ))
+        )
+      )
+    )
+  );
+}
+
+// ===== 店舗設定ページ =====
+function StoresPage({ stores, setStores }) {
+  const [editId, setEditId] = useState(null);
+  const [form, setForm] = useState({ name: '' });
+
+  function openEdit(s) { setForm({ name: s.name }); setEditId(s.id); }
+  function openAdd() { setForm({ name: '' }); setEditId('new'); }
+
+  function save() {
+    if (!form.name.trim()) return;
+    if (editId === 'new') {
+      setStores(prev => [...prev, { id: generateId(), name: form.name }]);
+    } else {
+      setStores(prev => prev.map(s => s.id === editId ? { ...s, name: form.name } : s));
+    }
+    setEditId(null);
+  }
+
+  function del(id) {
+    if (confirm('この店舗を削除しますか？')) setStores(prev => prev.filter(s => s.id !== id));
+  }
+
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'page-header' },
+      React.createElement('h2', { className: 'page-title' }, '🚐 店舗設定'),
+      React.createElement('button', { className: 'btn btn-primary', onClick: openAdd }, '+ 店舗追加')
+    ),
+
+    editId && React.createElement('div', { className: 'modal-overlay' },
+      React.createElement('div', { className: 'modal', style: { maxWidth: 360 } },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, editId === 'new' ? '店舗追加' : '店舗編集'),
+          React.createElement('button', { className: 'modal-close', onClick: () => setEditId(null) }, '✕')
+        ),
+        React.createElement('div', { className: 'form-group mb-12' },
+          React.createElement('label', null, '店舗名'),
+          React.createElement('input', { type: 'text', value: form.name, onChange: e => setForm(f => ({ ...f, name: e.target.value })) })
+        ),
+        React.createElement('div', { className: 'flex gap-8' },
+          React.createElement('button', { className: 'btn btn-primary', onClick: save }, '保存'),
+          React.createElement('button', { className: 'btn btn-secondary', onClick: () => setEditId(null) }, 'キャンセル'),
+        )
+      )
+    ),
+
+    React.createElement('div', { className: 'card' },
+      React.createElement('table', null,
+        React.createElement('thead', null,
+          React.createElement('tr', null,
+            React.createElement('th', null, '店舗名'),
+            React.createElement('th', null, '操作'),
+          )
+        ),
+        React.createElement('tbody', null,
+          stores.map(s => React.createElement('tr', { key: s.id },
+            React.createElement('td', null, s.name),
+            React.createElement('td', null,
+              React.createElement('div', { className: 'table-actions' },
+                React.createElement('button', { className: 'btn btn-icon btn-sm', onClick: () => openEdit(s) }, '✏'),
+                React.createElement('button', { className: 'btn btn-danger btn-sm', onClick: () => del(s.id) }, '✕'),
+              )
+            )
+          ))
+        )
+      )
+    )
+  );
+}
+
+
+
+// ===== バックアップページ =====
+function BackupPage({ products, stores, salesHistory, schedules, storeInventory,
+  warehouseInventory, productMapping, minStock,
+  setProducts, setStores, setSalesHistory, setSchedules,
+  setStoreInventory, setWarehouseInventory, setProductMapping, setMinStock }) {
+
+  const [restoreMsg, setRestoreMsg] = useState('');
+  const today = new Date().toISOString().split('T')[0];
+
+  // 全データをJSONとしてダウンロード
+  function exportBackup() {
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      products, stores, salesHistory, schedules,
+      storeInventory, warehouseInventory, productMapping, minStock,
+      forecastOverrides: loadState('forecastOverrides', {}),
+      inventoryDates: loadState('inventoryDates', {}),
+    };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `coffee_backup_${today}.json`;
+    a.click();
+  }
+
+  // JSONバックアップを復元
+  function handleRestore(file) {
+    setRestoreMsg('読み込み中...');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.version) throw new Error('バックアップファイルの形式が正しくありません');
+        if (!confirm('現在のすべてのデータをバックアップで上書きします。よろしいですか？')) {
+          setRestoreMsg('キャンセルしました');
+          return;
+        }
+        if (data.products)          setProducts(data.products);
+        if (data.stores)            setStores(data.stores);
+        if (data.salesHistory)      setSalesHistory(data.salesHistory);
+        if (data.schedules)         setSchedules(data.schedules);
+        if (data.storeInventory)    setStoreInventory(data.storeInventory);
+        if (data.warehouseInventory) setWarehouseInventory(data.warehouseInventory);
+        if (data.productMapping)    setProductMapping(data.productMapping);
+        if (data.minStock !== undefined) setMinStock(data.minStock);
+        if (data.forecastOverrides) saveState('forecastOverrides', data.forecastOverrides);
+        if (data.inventoryDates)    saveState('inventoryDates', data.inventoryDates);
+        setRestoreMsg(`✅ 復元完了（バックアップ作成日時: ${data.exportedAt || '不明'}）`);
+      } catch(err) {
+        setRestoreMsg('❌ エラー: ' + err.message);
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  const totalSize = (() => {
+    try {
+      let total = 0;
+      for (const k of Object.keys(localStorage)) {
+        total += (localStorage.getItem(k) || '').length;
+      }
+      return (total / 1024).toFixed(1);
+    } catch { return '?'; }
+  })();
+
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'page-header' },
+      React.createElement('h2', { className: 'page-title' }, '💾 バックアップ・復元')
+    ),
+
+    React.createElement('div', { className: 'alert alert-info mb-12' },
+      'データはブラウザのlocalStorageに保存されています。ブラウザのデータ削除やPC変更時に消えます。定期的にバックアップを保存してください。'
+    ),
+
+    React.createElement('div', { className: 'grid-2' },
+      // エクスポートカード
+      React.createElement('div', { className: 'card' },
+        React.createElement('div', { className: 'card-title' }, '📤 バックアップをダウンロード'),
+        React.createElement('div', { className: 'grid-3', style: { marginBottom: 16 } },
+          React.createElement('div', { className: 'stat-card' },
+            React.createElement('div', { className: 'stat-label' }, '販売実績'),
+            React.createElement('div', { className: 'stat-value', style: { fontSize: 20 } }, salesHistory.length,
+              React.createElement('span', { className: 'stat-unit' }, '件'))
+          ),
+          React.createElement('div', { className: 'stat-card' },
+            React.createElement('div', { className: 'stat-label' }, 'スケジュール'),
+            React.createElement('div', { className: 'stat-value', style: { fontSize: 20 } }, schedules.length,
+              React.createElement('span', { className: 'stat-unit' }, '件'))
+          ),
+          React.createElement('div', { className: 'stat-card' },
+            React.createElement('div', { className: 'stat-label' }, '保存サイズ'),
+            React.createElement('div', { className: 'stat-value', style: { fontSize: 20 } }, totalSize,
+              React.createElement('span', { className: 'stat-unit' }, 'KB'))
+          ),
+        ),
+        React.createElement('p', { className: 'text-sm', style: { marginBottom: 16 } },
+          `すべてのデータ（実績・スケジュール・在庫・商品設定・焙煎データ）をJSONファイルに保存します。`
+        ),
+        React.createElement('button', {
+          className: 'btn btn-primary',
+          style: { width: '100%', padding: '12px' },
+          onClick: exportBackup
+        }, `💾 バックアップをダウンロード (${today})`)
+      ),
+
+      // インポートカード
+      React.createElement('div', { className: 'card' },
+        React.createElement('div', { className: 'card-title' }, '📥 バックアップから復元'),
+        React.createElement('p', { className: 'text-sm', style: { marginBottom: 12, color: 'var(--red)' } },
+          '⚠ 復元すると現在のデータはすべて上書きされます。'
+        ),
+        React.createElement(DropZone, {
+          accept: '.json',
+          message: 'バックアップJSONファイルをドロップまたはクリックして選択',
+          subMessage: '以前ダウンロードした coffee_backup_*.json ファイル',
+          status: restoreMsg,
+          onFile: handleRestore
+        })
+      )
+    )
+  );
+}
+// ===== マウント =====
+const root = ReactDOM.createRoot(document.getElementById('app'));
+root.render(React.createElement(App));
+
+</script>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCNxDr8wqq-dIfI7ns9mZ6GySQkP0qAN1I",
+  authDomain: "shift-app-920a1.firebaseapp.com",
+  projectId: "shift-app-920a1",
+  storageBucket: "shift-app-920a1.firebasestorage.app",
+  messagingSenderId: "393055910720",
+  appId: "1:393055910720:web:97b30c30b3f3b85ba758a5"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+let currentUser = null;
+let saveTimer = null;
+
+function fbSetStatus(msg) {
+  const el = document.getElementById('fb-save-status');
+  if(el) el.textContent = msg;
+}
+
+document.getElementById('login-btn').addEventListener('click', async () => {
+  document.getElementById('login-loading').style.display = 'block';
+  try {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  } catch(e) {
+    document.getElementById('login-loading').style.display = 'none';
+    alert('ログインに失敗しました。\n' + e.message);
+  }
+});
+
+window.doSignOut = async () => {
+  if(confirm('ログアウトしますか？')) await signOut(auth);
+};
+
+async function loadFromFirestore() {
+  if(!currentUser) return;
+  try {
+    const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
+    const snap = await getDoc(ref);
+    if(snap.exists()) {
+      const d = snap.data();
+      if(d && Object.keys(d).length > 0) {
+        _initFromFirestore(d);
+        fbSetStatus('復元完了');
+        setTimeout(()=>fbSetStatus(''), 2000);
+      }
+    }
+  } catch(e) {
+    console.error('Firestore読み込みエラー:', e);
+    fbSetStatus('読み込み失敗: ' + e.message);
+  }
+}
+
+window._saveToFirestore = async (data) => {
+  if(!currentUser) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
+      await setDoc(ref, data);
+      fbSetStatus('✓ 保存済み');
+      setTimeout(()=>fbSetStatus(''), 2000);
+    } catch(e) {
+      console.error('Firestore保存エラー:', e);
+      fbSetStatus('⚠ 保存失敗');
+    }
+  }, 1000);
+};
+
+onAuthStateChanged(auth, async (user) => {
+  if(user) {
+    currentUser = user;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-body').style.display = 'block';
+    document.getElementById('fb-user-name').textContent = user.displayName;
+    await loadFromFirestore();
+  } else {
+    currentUser = null;
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app-body').style.display = 'none';
+  }
+});
+</script>
+
+</body>
+</html>
