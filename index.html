@@ -450,6 +450,7 @@ function saveState(key, value) {
 }
 function _initFromFirestore(data) {
   if(!data) return;
+  console.log('Firestore読み込みデータ:', Object.keys(data));
   Object.keys(data).forEach(k => { _localCache[k] = data[k]; });
 }
 
@@ -3277,7 +3278,10 @@ window._saveToFirestore = async (data) => {
   saveTimer = setTimeout(async () => {
     try {
       const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
-      await setDoc(ref, data);
+      // undefinedの値を除去してからFirestoreに保存
+      const cleanData = JSON.parse(JSON.stringify(data, (key, val) => val === undefined ? null : val));
+      console.log('Firestore保存データ:', Object.keys(cleanData), '件');
+      await setDoc(ref, cleanData);
       fbSetStatus('✓ 保存済み');
       setTimeout(()=>fbSetStatus(''), 2000);
     } catch(e) {
