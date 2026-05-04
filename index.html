@@ -3168,9 +3168,15 @@ function BackupPage({ products, stores, salesHistory, schedules, storeInventory,
     )
   );
 }
-// ===== マウント =====
-const root = ReactDOM.createRoot(document.getElementById('app'));
-root.render(React.createElement(App));
+// ===== マウント（ログイン後に実行） =====
+window._mountReactApp = function() {
+  const appEl = document.getElementById('app');
+  if(appEl && !appEl._reactRoot) {
+    const root = ReactDOM.createRoot(appEl);
+    root.render(React.createElement(App));
+    appEl._reactRoot = true;
+  }
+};
 
 </script>
 
@@ -3257,6 +3263,8 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-body').style.display = 'block';
     document.getElementById('fb-user-name').textContent = user.displayName;
+    // Reactアプリをマウント（初回のみ）
+    if(window._mountReactApp) window._mountReactApp();
     await loadFromFirestore();
   } else {
     currentUser = null;
