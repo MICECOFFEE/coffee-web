@@ -195,6 +195,36 @@
 .fb-logout-btn{padding:4px 12px;border-radius:99px;border:1px solid rgba(255,255,255,0.4);background:transparent;color:white;cursor:pointer;font-size:12px;}
 .fb-logout-btn:hover{background:rgba(255,255,255,0.15);}
 .fb-save-status{font-size:11px;opacity:0.75;}
+
+/* スマートフォン対応 */
+@media (max-width: 768px) {
+  .sidebar { 
+    width: 100% !important; 
+    position: fixed !important;
+    bottom: 0 !important;
+    top: auto !important;
+    height: auto !important;
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    z-index: 100 !important;
+    padding: 0 !important;
+  }
+  .sidebar nav {
+    display: flex !important;
+    flex-direction: row !important;
+    width: 100% !important;
+  }
+  .sidebar nav button, .sidebar nav a {
+    flex-shrink: 0 !important;
+    font-size: 10px !important;
+    padding: 8px 6px !important;
+  }
+  .main-content, main, .content {
+    margin-left: 0 !important;
+    padding-bottom: 80px !important;
+  }
+}
 </style>
 </head>
 <body>
@@ -3263,9 +3293,9 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-body').style.display = 'block';
     document.getElementById('fb-user-name').textContent = user.displayName;
-    // Reactアプリをマウント（初回のみ）
-    if(window._mountReactApp) window._mountReactApp();
+    // Firestoreからデータを読み込んでからReactをマウント
     await loadFromFirestore();
+    if(window._mountReactApp) window._mountReactApp();
   } else {
     currentUser = null;
     document.getElementById('login-screen').style.display = 'flex';
