@@ -1741,11 +1741,45 @@ function SchedulesPage({ schedules, setSchedules, stores, salesHistory }) {
       React.createElement('div', { className: 'card-title' }, '🔗 100g COFFEEシフト管理 v3 から読み込み'),
       React.createElement('div', { className: 'alert alert-info', style: { marginBottom: 10 } },
         React.createElement('div', { style: { fontSize: 12 } },
-          'シフト管理CSVを読み込み、期間を指定してスケジュールに取り込みます。'
+          'シフト管理アプリのシフト表タブから「☕ コーヒー管理に共有」ボタンで共有したデータを取り込みます。'
         ),
         React.createElement('div', { style: { fontSize: 11, marginTop: 3, color: 'var(--text2)' } },
-          '日付・店舗(号車)・出店場所 の列を自動検出します。'
+          '取込む月を指定して「Firebaseから読み込む」ボタンを押してください。'
         )
+      ),
+      React.createElement('div', { className: 'flex gap-12 items-center mb-12', style: { flexWrap: 'wrap' } },
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '取込む月'),
+          React.createElement('input', { type: 'month', value: shiftFrom ? shiftFrom.slice(0,7) : '',
+            onChange: e => { setShiftFrom(e.target.value + '-01'); setShiftTo(e.target.value + '-31'); },
+            style: { width: 140 } })
+        ),
+        React.createElement('button', {
+          className: 'btn btn-primary',
+          style: { marginTop: 20 },
+          onClick: async () => {
+            const month = shiftFrom ? shiftFrom.slice(0,7) : '';
+            if(!month) { alert('月を指定してください'); return; }
+            if(!window._loadShiftFromFirestore) { alert('Firebase未接続です'); return; }
+            setShiftMsg('読み込み中...');
+            const data = await window._loadShiftFromFirestore(month);
+            if(!data || !data.schedules || data.schedules.length === 0) {
+              setShiftMsg('データが見つかりません。シフト管理アプリから「☕ コーヒー管理に共有」ボタンで共有してください。');
+              setShiftAllRows([]);
+              return;
+            }
+            const rows = data.schedules.map(s => ({
+              date: s.date,
+              storeId: s.storeId,
+              storeRaw: s.carNo + '号車',
+              location: s.location,
+              staffName: s.staffName
+            }));
+            setShiftAllRows(rows);
+            setShiftMsg(data.updatedAt ? '共有日時: ' + new Date(data.updatedAt).toLocaleString('ja-JP') : '');
+          }
+        }, '📥 Firebaseから読み込む'),
+        shiftMsg && React.createElement('span', { style: { fontSize: 12, color: 'var(--text2)', marginTop: 20 } }, shiftMsg),
       ),
       React.createElement('div', { className: 'flex gap-12 items-center mb-12', style: { flexWrap: 'wrap' } },
         React.createElement('div', { className: 'form-group' },
@@ -3271,6 +3305,22 @@ async function loadFromFirestore() {
     fbSetStatus('読み込み失敗: ' + e.message);
   }
 }
+
+// シフト管理アプリからスケジュールを読み込む
+window._loadShiftFromFirestore = async (month) => {
+  if(!currentUser) return null;
+  try {
+    const ref = doc(db, 'shift_schedules', currentUser.uid, 'data', month);
+    const snap = await getDoc(ref);
+    if(snap.exists()) {
+      return snap.data();
+    }
+    return null;
+  } catch(e) {
+    console.error('シフト読み込みエラー:', e);
+    return null;
+  }
+};
 
 window._saveToFirestore = async (data) => {
   if(!currentUser) return;
