@@ -128,8 +128,9 @@
 
   /* Print styles */
   @media print {
-    .sidebar, .no-print { display: none !important; }
-    .main { width: 100%; overflow: visible; }
+    .sidebar, .no-print, .sidebar-nav, nav { display: none !important; }
+    .app { display: block !important; }
+    .main { width: 100% !important; overflow: visible !important; margin-left: 0 !important; }
     .main-inner { padding: 8px; max-width: none; }
     body { background: white; font-size: 12pt; }
     .card { border: 1px solid #999; box-shadow: none; break-inside: avoid; margin: 0; padding: 12px; }
