@@ -1281,6 +1281,36 @@ function SchedulesPage({ schedules, setSchedules, stores, salesHistory }) {
       if (!rows.length) { setShiftMsg('データが読み取れませんでした'); return; }
       const cols = Object.keys(rows[0]);
 
+      // ===== バックアップCSV形式（場所×日付マトリクス）の検出 =====
+      // 1列目が「場所」で、残りが「1日(金)」「2日(土)」...のような形式
+      const firstCol = cols[0];
+      const isMatrixFormat = cols.slice(1).some(c => /^\d+日/.test(c.trim()));
+      if (isMatrixFormat) {
+        // ヘッダー行から年月を取得（ファイル名から推測）
+        // 列名「1日(金)」→日付はshiftFromとshiftToの月から補完
+        const parsed = [];
+        // 月を推測：shiftFromの値を使う
+        const monthStr = shiftFrom ? shiftFrom.slice(0,7) : new Date().toISOString().slice(0,7);
+        rows.forEach(row => {
+          const locName = String(row[firstCol]||'').trim();
+          if(!locName || locName === '場所') return;
+          cols.slice(1).forEach(col => {
+            const staffName = String(row[col]||'').trim();
+            if(!staffName || staffName === '[対象外]' || staffName === '対象外' || staffName === '') return;
+            // 列名から日を取得「1日(金)」→1
+            const dayMatch = col.trim().match(/^(\d+)日/);
+            if(!dayMatch) return;
+            const day = dayMatch[1].padStart(2,'0');
+            const dateStr = monthStr + '-' + day;
+            parsed.push({ date: dateStr, storeId: null, storeRaw: '', location: locName, staffName });
+          });
+        });
+        setShiftAllRows(parsed);
+        setShiftMsg(`読み込み完了: ${parsed.length}件（期間を指定してプレビューを確認してください）`);
+        return;
+      }
+
+      // ===== 通常の縦持ち形式 =====
       // 列を柔軟に検出
       function findCol(keys, pred) {
         for (const k of keys) {
@@ -1330,12 +1360,12 @@ function SchedulesPage({ schedules, setSchedules, stores, salesHistory }) {
     }
 
     function tryShiftJIS() {
-      Papa.parse(file, { header:true, skipEmptyLines:true, encoding:'Shift_JIS',
+      Papa.parse(file, { header:true, skipEmptyLines:true, encoding:'Shift_JIS', comments:'#',
         complete: r => { if(!r.data.length) { setShiftMsg('データが読み取れませんでした'); return; } processShiftRows(r.data); },
         error: err => setShiftMsg('エラー: '+err.message)
       });
     }
-    Papa.parse(file, { header:true, skipEmptyLines:true, encoding:'UTF-8',
+    Papa.parse(file, { header:true, skipEmptyLines:true, encoding:'UTF-8', comments:'#',
       complete: r => { if(!r.data.length||looksGarbled(r.data)) tryShiftJIS(); else processShiftRows(r.data); },
       error: () => tryShiftJIS()
     });
