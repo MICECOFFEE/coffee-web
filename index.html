@@ -128,11 +128,11 @@
 
   /* Print styles */
   @media print {
-    .sidebar, .no-print, .sidebar-nav, nav { display: none !important; }
-    .app { display: block !important; }
-    .main { width: 100% !important; overflow: visible !important; margin-left: 0 !important; }
+    .sidebar, .no-print, .sidebar-nav, nav, .fb-user-bar { display: none !important; }
+    .app { display: block !important; height: auto !important; }
+    .main { width: 100% !important; overflow: visible !important; margin-left: 0 !important; position: static !important; }
     .main-inner { padding: 8px; max-width: none; }
-    body { background: white; font-size: 12pt; }
+    body { background: white; font-size: 12pt; padding-bottom: 0 !important; }
     .card { border: 1px solid #999; box-shadow: none; break-inside: avoid; margin: 0; padding: 12px; }
     .delivery-store-block { page-break-after: always; margin-bottom: 0; }
     .delivery-store-block:last-child { page-break-after: avoid; }
