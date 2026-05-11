@@ -2009,7 +2009,7 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
     schedules
       .map(s => ({ ...s, _nd: normalizeDate(s.date) }))
       .filter(s => s._nd >= today && (!filterStore || s.storeId === filterStore))
-      .sort((a, b) => a.storeId.localeCompare(b.storeId) || a._nd.localeCompare(b._nd)),
+      .sort((a, b) => (a.storeId||'').localeCompare(b.storeId||'') || a._nd.localeCompare(b._nd)),
     [schedules, today, filterStore]
   );
 
