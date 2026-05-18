@@ -131,27 +131,32 @@
     .sidebar, .no-print, .sidebar-nav, nav, .fb-user-bar { display: none !important; }
     .app { display: block !important; height: auto !important; }
     .main { width: 100% !important; overflow: visible !important; margin-left: 0 !important; position: static !important; }
-    .main-inner { padding: 8px; max-width: none; }
-    body { background: white; font-size: 12pt; padding-bottom: 0 !important; }
-    .card { border: 1px solid #999; box-shadow: none; break-inside: avoid; margin: 0; padding: 12px; }
+    .main-inner { padding: 4px; max-width: none; }
+    body { background: white; font-size: 10pt; padding-bottom: 0 !important; }
+    .card { border: 1px solid #999; box-shadow: none; break-inside: avoid; margin: 0 0 8px 0; padding: 8px; }
     .delivery-store-block { page-break-after: always; margin-bottom: 0; }
     .delivery-store-block:last-child { page-break-after: avoid; }
     .delivery-print-card { border: 1.5px solid #555 !important; }
+    .forecast-store-block { page-break-inside: avoid; margin-bottom: 12px; }
     .scroll-x { overflow: visible; }
-    h1, h2, h3 { font-size: 14pt; }
-    th { font-size: 11pt; padding: 6px 8px; }
-    td { font-size: 11pt; padding: 5px 8px; }
-    .badge { border: 1px solid #999; }
+    h1, h2, h3 { font-size: 12pt; }
+    th { font-size: 9pt; padding: 3px 5px; }
+    td { font-size: 9pt; padding: 3px 5px; }
+    .badge { border: 1px solid #999; font-size: 8pt; }
     .stat-card, .alert { display: none; }
     .tabs { display: none; }
     .page-header { display: none; }
-    .mt-12 { margin-top: 6px; }
+    .mt-12 { margin-top: 4px; }
+    .forecast-print-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
   }
   @media screen {
     .print-only { display: none !important; }
+    .forecast-print-header { display: none; }
   }
   @media print {
     .print-only { display: block !important; }
+    .no-print { display: none !important; }
+    .forecast-print-header { display: flex !important; }
   }
 
   .scroll-x { overflow-x: auto; }
@@ -561,30 +566,39 @@ function App() {
 }
 
 // ===== 予測ロジック =====
-function computeForecast(schedule, salesHistory, stores, products, productMapping) {
+function buildHistoryIndex(salesHistory, products, productMapping) {
+  const idx = {};
+  for (const prod of products) idx[prod.id] = [];
+  const mappedIds = {};
+  for (const [csvName, pid] of Object.entries(productMapping)) mappedIds[normalizeStr(csvName)] = pid;
+  for (const row of salesHistory) {
+    let pid = row.productId;
+    if (!pid) {
+      pid = mappedIds[normalizeStr(row.productNameRaw)];
+      if (!pid) {
+        let best = 0;
+        for (const prod of products) {
+          const sc = productNameMatch(normalizeStr(row.productNameRaw), normalizeStr(prod.name));
+          if (sc > best) { best = sc; pid = prod.id; }
+        }
+        if (best < 0.4) pid = null;
+      }
+    }
+    if (pid && idx[pid]) idx[pid].push(row);
+  }
+  return idx;
+}
+
+function computeForecast(schedule, historyIndex, products) {
   // schedule: {storeId, date, location, altLocation, altStoreId}
   const targetDow = dowFromDateStr(schedule.date); // 0=日（タイムゾーン安全）
   const targetLoc = schedule.location;
   const targetStoreId = schedule.storeId;
 
-  const result = {}; // productId -> g
+  const result = {};
 
   for (const prod of products) {
-    // この商品に紐付いた csvName 一覧
-    const mappedCsvNames = Object.entries(productMapping)
-      .filter(([, pid]) => pid === prod.id)
-      .map(([cn]) => cn);
-
-    // 取り込み済み実績から該当商品を絞り込む（productId か productNameRaw で照合）
-    const relevantHistory = salesHistory.filter(row => {
-      if (row.productId === prod.id) return true;
-      if (mappedCsvNames.includes(row.productNameRaw)) return true;
-      // 名前ベースでのフォールバック照合
-      if (mappedCsvNames.some(cn => productNameMatch(cn, row.productNameRaw) > 0.5)) return true;
-      if (productNameMatch(prod.name, row.productNameRaw) > 0.5) return true;
-      return false;
-    });
-
+    const relevantHistory = historyIndex[prod.id] || [];
     if (relevantHistory.length === 0) { result[prod.id] = 0; continue; }
 
     // 条件: 同じ場所 AND 同じ店舗 AND 同じ曜日
@@ -1233,15 +1247,20 @@ function SchedulesPage({ schedules, setSchedules, stores, salesHistory }) {
     setShiftPreview(filtered);
   }, [shiftAllRows, shiftFrom, shiftTo]);
 
-  function openAdd() { setForm({ storeId: stores[0]?.id || '', date: '', location: '', altLocation: '', altStoreId: '', deliveryDate: '' }); setEditId(null); setShowAdd(true); }
-  function openEdit(s) { setForm({ ...s }); setEditId(s.id); setShowAdd(true); }
-
+  function openAdd() {
+    setForm({ storeId: stores[0]?.id || '', date: '', location: '', altLocation: '', altStoreId: '', deliveryDate: '', extraDates: '' });
+    setEditId(null); setShowAdd(true);
+  }
+  function openEdit(s) { setForm({ ...s, extraDates: '' }); setEditId(s.id); setShowAdd(true); }
   function save() {
     if (!form.storeId || !form.date) { alert('店舗と日付を入力してください'); return; }
     if (editId) {
       setSchedules(prev => prev.map(s => s.id === editId ? { ...form, id: editId } : s));
     } else {
-      setSchedules(prev => [...prev, { ...form, id: generateId() }]);
+      const allDates = [form.date, ...(form.extraDates || '').split(/[\n,\s]+/).filter(Boolean)];
+      const normDates = [...new Set(allDates.map(d => normalizeDate(d.trim())).filter(Boolean))];
+      const newItems = normDates.map(d => ({ id: generateId(), storeId: form.storeId, date: d, location: form.location, deliveryDate: form.deliveryDate, altLocation: form.altLocation, altStoreId: form.altStoreId }));
+      setSchedules(prev => { const ex = new Set(prev.map(s=>`${s.date}|${s.storeId}`)); return [...prev, ...newItems.filter(s=>!ex.has(`${s.date}|${s.storeId}`))]; });
     }
     setShowAdd(false);
   }
@@ -1937,6 +1956,10 @@ function SchedulesPage({ schedules, setSchedules, stores, salesHistory }) {
             React.createElement('input', { type: 'date', value: form.deliveryDate, onChange: e => setForm(f => ({ ...f, deliveryDate: e.target.value })) })
           )
         ),
+        !editId && React.createElement('div', { className: 'form-group mb-12' },
+          React.createElement('label', null, '追加日付（複数日を一括登録する場合）'),
+          React.createElement('textarea', { value: form.extraDates || '', onChange: e => setForm(f => ({ ...f, extraDates: e.target.value })), placeholder: '2026/4/22\n2026/4/23\n（改行・カンマ・スペース区切りで複数入力）', style: { width: '100%', height: 80, resize: 'vertical', fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '6px 10px' } })
+        ),
         React.createElement('div', { className: 'card', style: { background: 'var(--surface2)', marginBottom: 12 } },
           React.createElement('p', { className: 'text-xs mb-8' }, '過去に同じ場所・店舗・曜日のデータがない場合の代替設定'),
           React.createElement('div', { className: 'form-row' },
@@ -2033,20 +2056,20 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
     [schedules, today, filterStore]
   );
 
-  // 全予測をまとめてメモ化（最大のボトルネック解消）
+  const historyIndex = useMemo(() => buildHistoryIndex(salesHistory, products, productMapping), [salesHistory, products, productMapping]);
   const forecastCache = useMemo(() => {
     const cache = {};
     try {
       for (const s of upcomingSchedules) {
         if (!s || !s.id) continue;
-        const base = computeForecast(s, salesHistory, stores, products, productMapping);
+        const base = computeForecast(s, historyIndex, products);
         cache[s.id] = { ...base };
         const ov = overrides[s.id] || {};
         for (const [pid, g] of Object.entries(ov)) cache[s.id][pid] = Number(g) || 0;
       }
     } catch(e) { console.error('ForecastPage cache error', e); }
     return cache;
-  }, [upcomingSchedules, salesHistory, stores, products, productMapping, overrides]);
+  }, [upcomingSchedules, historyIndex, products, overrides]);
 
   // 店舗ごとグループ
   const byStore = useMemo(() => {
@@ -2138,11 +2161,16 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
       )
     ),
 
+    React.createElement('div', { className: 'forecast-print-header' },
+      React.createElement('div', { style: { fontWeight: 700, fontSize: '14pt' } }, 'コーヒー販売予想'),
+      React.createElement('div', { style: { fontSize: '10pt' } }, `作成日: ${new Date().toLocaleDateString('ja-JP')}　最低在庫: ${minStock.toLocaleString()}g`)
+    ),
+
     Object.keys(byStore).length === 0
       ? React.createElement('div', { className: 'alert alert-info mt-12' }, '出店スケジュールがありません。先にスケジュールを登録してください。')
       : Object.entries(byStore).map(([storeId, storeSchedules]) => {
         const store = stores.find(s => s.id === storeId);
-        return React.createElement('div', { key: storeId, className: 'card mt-12' },
+        return React.createElement('div', { key: storeId, className: 'card mt-12 forecast-store-block' },
           React.createElement('div', { className: 'card-title' }, `🚐 ${store?.name || storeId}`),
           React.createElement('div', { className: 'scroll-x' },
             React.createElement('table', null,
@@ -2199,20 +2227,20 @@ function DeliveryPage({ schedules, stores, products, salesHistory, productMappin
   const today = new Date().toISOString().split('T')[0];
   const overrides = useMemo(() => { try { return loadState('forecastOverrides', {}); } catch(e) { return {}; } }, []);
 
-  // 全スケジュール予測をメモ化
+  const historyIndex = useMemo(() => buildHistoryIndex(salesHistory, products, productMapping), [salesHistory, products, productMapping]);
   const forecastCache = useMemo(() => {
     const cache = {};
     try {
       for (const s of schedules) {
         if (!s || !s.id) continue;
-        const base = computeForecast(s, salesHistory, stores, products, productMapping);
+        const base = computeForecast(s, historyIndex, products);
         cache[s.id] = { ...base };
         const ov = overrides[s.id] || {};
         for (const [pid, g] of Object.entries(ov)) cache[s.id][pid] = Number(g) || 0;
       }
     } catch(e) { console.error('forecastCache error', e); }
     return cache;
-  }, [schedules, salesHistory, stores, products, productMapping, overrides]);
+  }, [schedules, historyIndex, products, overrides]);
 
   // 表示対象の店舗リスト
   const targetStores = filterStore ? stores.filter(s => s.id === filterStore) : stores;
@@ -2433,20 +2461,20 @@ function RoastingPage({ products, stores, schedules, salesHistory, productMappin
   const today = new Date().toISOString().split('T')[0];
   const overrides = useMemo(() => { try { return loadState('forecastOverrides', {}); } catch(e) { return {}; } }, []);
 
-  // 全スケジュール予測をメモ化
+  const historyIndex = useMemo(() => buildHistoryIndex(salesHistory, products, productMapping), [salesHistory, products, productMapping]);
   const forecastCache = useMemo(() => {
     const cache = {};
     try {
       for (const s of schedules) {
         if (!s || !s.id) continue;
-        const base = computeForecast(s, salesHistory, stores, products, productMapping);
+        const base = computeForecast(s, historyIndex, products);
         cache[s.id] = { ...base };
         const ov = overrides[s.id] || {};
         for (const [pid, g] of Object.entries(ov)) cache[s.id][pid] = Number(g) || 0;
       }
     } catch(e) { console.error('roast forecastCache error', e); }
     return cache;
-  }, [schedules, salesHistory, stores, products, productMapping, overrides]);
+  }, [schedules, historyIndex, products, overrides]);
 
   // 全店舗の必要袋数合計をメモ化
   const roastPlan = useMemo(() => {
