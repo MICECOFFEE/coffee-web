@@ -590,67 +590,74 @@ function buildHistoryIndex(salesHistory, products, productMapping) {
 }
 
 function computeForecast(schedule, historyIndex, products) {
-  // schedule: {storeId, date, location, altLocation, altStoreId}
-  const targetDow = dowFromDateStr(schedule.date); // 0=日（タイムゾーン安全）
-  const targetLoc = schedule.location;
+  const targetDow = dowFromDateStr(schedule.date);
+  const targetLoc = (schedule.location || '').trim();
   const targetStoreId = schedule.storeId;
-
   const result = {};
+  const norm = loc => (loc || '').trim();
 
   for (const prod of products) {
-    const relevantHistory = historyIndex[prod.id] || [];
-    if (relevantHistory.length === 0) { result[prod.id] = 0; continue; }
+    const h = historyIndex[prod.id] || [];
+    if (h.length === 0) { result[prod.id] = 0; continue; }
 
-    // 条件: 同じ場所 AND 同じ店舗 AND 同じ曜日
-    let matched = relevantHistory.filter(r =>
-      r.location === targetLoc &&
-      r.storeId === targetStoreId &&
-      dowFromDateStr(r.date) === targetDow
-    );
+    let matched = [];
 
-    // フォールバック1: 同じ場所 AND 同じ店舗
-    if (matched.length === 0) {
-      matched = relevantHistory.filter(r =>
-        r.location === targetLoc && r.storeId === targetStoreId
-      );
+    // Lv1: 同じ場所 × 同じ店舗 × 同じ曜日
+    matched = h.filter(r => norm(r.location) === targetLoc && r.storeId === targetStoreId && dowFromDateStr(r.date) === targetDow);
+    if (matched.length > 0) { result[prod.id] = Math.round(avg(matched) * 1.1); continue; }
+
+    // Lv2: 同じ場所 × 同じ店舗
+    matched = h.filter(r => norm(r.location) === targetLoc && r.storeId === targetStoreId);
+    if (matched.length > 0) { result[prod.id] = Math.round(avg(matched) * 1.1); continue; }
+
+    // Lv3: 同じ場所 × 同じ曜日（他店含む）
+    if (targetLoc) {
+      matched = h.filter(r => norm(r.location) === targetLoc && dowFromDateStr(r.date) === targetDow);
+      if (matched.length > 0) { result[prod.id] = Math.round(avg(matched) * 1.1); continue; }
     }
 
-    // フォールバック2: 同じ場所 AND 同じ曜日
-    if (matched.length === 0) {
-      matched = relevantHistory.filter(r =>
-        r.location === targetLoc && dowFromDateStr(r.date) === targetDow
-      );
+    // Lv4: 同じ場所（他店含む）
+    if (targetLoc) {
+      matched = h.filter(r => norm(r.location) === targetLoc);
+      if (matched.length > 0) { result[prod.id] = Math.round(avg(matched) * 1.1); continue; }
     }
 
-    // フォールバック3: 同じ場所
-    if (matched.length === 0 && targetLoc) {
-      matched = relevantHistory.filter(r => r.location === targetLoc);
+    // Lv5: 代替場所 × 同じ店舗
+    if (schedule.altLocation) {
+      const altLoc = schedule.altLocation.trim();
+      matched = h.filter(r => norm(r.location) === altLoc && r.storeId === targetStoreId);
+      if (matched.length > 0) { result[prod.id] = Math.round(avg(matched) * 1.1); continue; }
+      matched = h.filter(r => norm(r.location) === altLoc);
+      if (matched.length > 0) { result[prod.id] = Math.round(avg(matched) * 1.1); continue; }
     }
 
-    // フォールバック4: 代替場所
-    if (matched.length === 0 && schedule.altLocation) {
-      matched = relevantHistory.filter(r =>
-        r.location === schedule.altLocation && r.storeId === targetStoreId
-      );
+    // Lv6: 代替店舗 × 同じ場所
+    if (schedule.altStoreId && targetLoc) {
+      matched = h.filter(r => norm(r.location) === targetLoc && r.storeId === schedule.altStoreId);
+      if (matched.length > 0) { result[prod.id] = Math.round(avg(matched) * 1.1); continue; }
     }
 
-    // フォールバック5: 代替店舗 (同じ場所)
-    if (matched.length === 0 && schedule.altStoreId) {
-      matched = relevantHistory.filter(r =>
-        r.location === targetLoc && r.storeId === schedule.altStoreId
-      );
-    }
+    // Lv7: 同じ店舗 × 同じ曜日
+    matched = h.filter(r => r.storeId === targetStoreId && dowFromDateStr(r.date) === targetDow);
+    if (matched.length > 0) { result[prod.id] = Math.round(avg(matched) * 1.1); continue; }
 
-    // フォールバック6: 全体平均
-    if (matched.length === 0) matched = relevantHistory;
+    // Lv8: 同じ店舗
+    matched = h.filter(r => r.storeId === targetStoreId);
+    if (matched.length > 0) { result[prod.id] = Math.round(avg(matched) * 1.1); continue; }
 
-    if (matched.length === 0) { result[prod.id] = 0; continue; }
+    // Lv9: 同じ曜日（全店）
+    matched = h.filter(r => dowFromDateStr(r.date) === targetDow);
+    if (matched.length > 0) { result[prod.id] = Math.round(avg(matched) * 1.1); continue; }
 
-    const avg = matched.reduce((s, r) => s + (parseFloat(r.salesG) || 0), 0) / matched.length;
-    result[prod.id] = Math.round(avg * 1.1); // 10%アップ
+    // Lv10: 全体平均
+    result[prod.id] = Math.round(avg(h) * 1.1);
   }
-
   return result;
+}
+
+function avg(rows) {
+  if (!rows.length) return 0;
+  return rows.reduce((s, r) => s + (parseFloat(r.salesG) || 0), 0) / rows.length;
 }
 
 // ===== ダッシュボード =====
