@@ -2051,6 +2051,14 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
   const [editOverride, setEditOverride] = useState(null);
   const [overrides, setOverrides] = useState(() => loadState('forecastOverrides', {}));
 
+  // 過去データ引用モーダル用state
+  const [refModal, setRefModal] = useState(null);
+  const [refMode, setRefMode] = useState('date');
+  const [refDate, setRefDate] = useState('');
+  const [refLocation, setRefLocation] = useState('');
+  const [refStoreId, setRefStoreId] = useState('');
+  const [refValues, setRefValues] = useState({});
+
   useEffect(() => { saveState('forecastOverrides', overrides); }, [overrides]);
 
   const today = new Date().toISOString().split('T')[0];
@@ -2059,11 +2067,15 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
     schedules
       .map(s => ({ ...s, _nd: normalizeDate(s.date) }))
       .filter(s => s._nd >= today && (!filterStore || s.storeId === filterStore))
-      .sort((a, b) => (a.storeId||'').localeCompare(b.storeId||'') || a._nd.localeCompare(b._nd)),
+      .sort((a, b) => a.storeId.localeCompare(b.storeId) || a._nd.localeCompare(b._nd)),
     [schedules, today, filterStore]
   );
 
-  const historyIndex = useMemo(() => buildHistoryIndex(salesHistory, products, productMapping), [salesHistory, products, productMapping]);
+  const historyIndex = useMemo(() =>
+    buildHistoryIndex(salesHistory, products, productMapping),
+    [salesHistory, products, productMapping]
+  );
+
   const forecastCache = useMemo(() => {
     const cache = {};
     try {
@@ -2078,7 +2090,6 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
     return cache;
   }, [upcomingSchedules, historyIndex, products, overrides]);
 
-  // 店舗ごとグループ
   const byStore = useMemo(() => {
     const map = {};
     for (const s of upcomingSchedules) {
@@ -2088,17 +2099,63 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
     return map;
   }, [upcomingSchedules]);
 
+  const historyDates = useMemo(() =>
+    [...new Set(salesHistory.map(r => r.date).filter(Boolean))].sort().reverse(),
+    [salesHistory]
+  );
+  const historyLocations = useMemo(() =>
+    [...new Set(salesHistory.map(r => r.location).filter(Boolean))].sort(),
+    [salesHistory]
+  );
+
   function saveOverride() {
     if (!editOverride) return;
     const { scheduleId, productId, value } = editOverride;
-    setOverrides(prev => ({
-      ...prev,
-      [scheduleId]: { ...(prev[scheduleId] || {}), [productId]: parseFloat(value) || 0 }
-    }));
+    setOverrides(prev => ({ ...prev, [scheduleId]: { ...(prev[scheduleId] || {}), [productId]: parseFloat(value) || 0 } }));
     setEditOverride(null);
   }
 
-  // CSV ダウンロード
+  function openRefModal(s) {
+    setRefModal({ scheduleId: s.id, storeId: s.storeId, location: s.location, date: s.date });
+    setRefMode('date');
+    setRefDate('');
+    setRefLocation(s.location || '');
+    setRefStoreId(s.storeId);
+    setRefValues({});
+  }
+
+  // 引用候補値を計算
+  const refCandidates = useMemo(() => {
+    if (!refModal) return {};
+    const result = {};
+    for (const prod of products) {
+      const h = historyIndex[prod.id] || [];
+      let rows = [];
+      if (refMode === 'date' && refDate) {
+        rows = h.filter(r => r.date === refDate);
+        const sameStore = rows.filter(r => r.storeId === refStoreId);
+        if (sameStore.length > 0) rows = sameStore;
+      } else if (refMode === 'location' && refLocation) {
+        rows = h.filter(r => (r.location||'').trim() === refLocation.trim() && r.storeId === refStoreId);
+        if (rows.length === 0) rows = h.filter(r => (r.location||'').trim() === refLocation.trim());
+      }
+      result[prod.id] = rows.length > 0 ? Math.round(rows.reduce((s,r) => s+(r.salesG||0), 0) / rows.length) : 0;
+    }
+    return result;
+  }, [refModal, refMode, refDate, refLocation, refStoreId, historyIndex, products]);
+
+  useEffect(() => {
+    if (Object.keys(refCandidates).some(k => refCandidates[k] > 0)) setRefValues({ ...refCandidates });
+  }, [refCandidates]);
+
+  function applyRef() {
+    if (!refModal) return;
+    const newOv = { ...(overrides[refModal.scheduleId] || {}) };
+    for (const [pid, g] of Object.entries(refValues)) { if (g > 0) newOv[pid] = g; }
+    setOverrides(prev => ({ ...prev, [refModal.scheduleId]: newOv }));
+    setRefModal(null);
+  }
+
   function exportCSV() {
     const rows = [];
     for (const [storeId, storeSchedules] of Object.entries(byStore)) {
@@ -2106,24 +2163,14 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
       for (const prod of products) {
         const row = { 店舗: store?.name || storeId, 商品: prod.name };
         let total = 0;
-        for (const s of storeSchedules) {
-          const v = (forecastCache[s.id] || {})[prod.id] || 0;
-          row[s.date] = v;
-          total += v;
-        }
+        for (const s of storeSchedules) { const v=(forecastCache[s.id]||{})[prod.id]||0; row[s.date]=v; total+=v; }
         row['合計(g)'] = total;
         if (total > 0) rows.push(row);
       }
     }
     const csv = Papa.unparse(rows);
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'forecast.csv'; a.click();
-  }
-
-  // 印刷
-  function printForecast() {
-    setTimeout(() => window.print(), 100);
+    const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='forecast.csv'; a.click();
   }
 
   return React.createElement('div', null,
@@ -2131,39 +2178,110 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
       React.createElement('h2', { className: 'page-title' }, '📈 販売予想'),
       React.createElement('div', { className: 'flex gap-8 items-center', style: { flexWrap: 'wrap' } },
         React.createElement('span', { className: 'text-sm' }, '最低在庫:'),
-        React.createElement('input', { type: 'number', value: minStock, style: { width: 80 },
-          onChange: e => setMinStock(parseInt(e.target.value) || 0)
-        }),
+        React.createElement('input', { type: 'number', value: minStock, style: { width: 80 }, onChange: e => setMinStock(parseInt(e.target.value)||0) }),
         React.createElement('span', { className: 'text-sm' }, 'g'),
-        React.createElement('select', {
-          value: filterStore, onChange: e => setFilterStore(e.target.value), style: { width: 120 }
-        },
+        React.createElement('select', { value: filterStore, onChange: e => setFilterStore(e.target.value), style: { width: 120 } },
           React.createElement('option', { value: '' }, '全店舗'),
           stores.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))
         ),
         React.createElement('button', { className: 'btn btn-secondary btn-sm', onClick: exportCSV }, '⬇ CSVダウンロード'),
-        React.createElement('button', { className: 'btn btn-secondary btn-sm no-print', onClick: printForecast }, '🖨 印刷'),
+        React.createElement('button', { className: 'btn btn-secondary btn-sm no-print', onClick: () => setTimeout(()=>window.print(),100) }, '🖨 印刷'),
       )
     ),
 
+    // 個別値修正モーダル
     editOverride && React.createElement('div', { className: 'modal-overlay no-print' },
       React.createElement('div', { className: 'modal', style: { maxWidth: 360 } },
         React.createElement('div', { className: 'modal-header' },
           React.createElement('span', { className: 'modal-title' }, '予想値を修正'),
           React.createElement('button', { className: 'modal-close', onClick: () => setEditOverride(null) }, '✕')
         ),
-        React.createElement('p', { className: 'text-sm mb-12' },
-          products.find(p => p.id === editOverride.productId)?.name
-        ),
+        React.createElement('p', { className: 'text-sm mb-12' }, products.find(p=>p.id===editOverride.productId)?.name),
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '販売予想量 (g)'),
-          React.createElement('input', { type: 'number', value: editOverride.value,
-            onChange: e => setEditOverride(prev => ({ ...prev, value: e.target.value }))
-          })
+          React.createElement('input', { type: 'number', value: editOverride.value, onChange: e => setEditOverride(prev=>({...prev,value:e.target.value})) })
         ),
         React.createElement('div', { className: 'flex gap-8 mt-12' },
           React.createElement('button', { className: 'btn btn-primary', onClick: saveOverride }, '保存'),
           React.createElement('button', { className: 'btn btn-secondary', onClick: () => setEditOverride(null) }, 'キャンセル'),
+        )
+      )
+    ),
+
+    // 過去データ引用モーダル
+    refModal && React.createElement('div', { className: 'modal-overlay no-print' },
+      React.createElement('div', { className: 'modal', style: { maxWidth: 560 } },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, '📎 過去データを引用'),
+          React.createElement('button', { className: 'modal-close', onClick: () => setRefModal(null) }, '✕')
+        ),
+        React.createElement('p', { className: 'text-sm mb-12' },
+          `対象: ${stores.find(s=>s.id===refModal.storeId)?.name} / ${fmtDate(refModal.date)} / ${refModal.location||'場所未設定'}`
+        ),
+        React.createElement('div', { className: 'tabs mb-12' },
+          React.createElement('div', { className: 'tab'+(refMode==='date'?' active':''), onClick: ()=>setRefMode('date') }, '📅 日付で指定'),
+          React.createElement('div', { className: 'tab'+(refMode==='location'?' active':''), onClick: ()=>setRefMode('location') }, '📍 場所で指定'),
+        ),
+        refMode === 'date' && React.createElement('div', { className: 'form-group mb-12' },
+          React.createElement('label', null, '引用する過去の日付'),
+          React.createElement('select', { value: refDate, onChange: e=>setRefDate(e.target.value), style: { width: '100%' } },
+            React.createElement('option', { value: '' }, '-- 日付を選択 --'),
+            historyDates.map(d => React.createElement('option', { key: d, value: d }, fmtDate(d)))
+          )
+        ),
+        refMode === 'location' && React.createElement('div', null,
+          React.createElement('div', { className: 'form-group mb-8' },
+            React.createElement('label', null, '引用する場所'),
+            React.createElement('select', { value: refLocation, onChange: e=>setRefLocation(e.target.value), style: { width: '100%' } },
+              React.createElement('option', { value: '' }, '-- 場所を選択 --'),
+              historyLocations.map(l => React.createElement('option', { key: l, value: l }, l))
+            )
+          ),
+          React.createElement('div', { className: 'form-group mb-12' },
+            React.createElement('label', null, '参照店舗'),
+            React.createElement('select', { value: refStoreId, onChange: e=>setRefStoreId(e.target.value), style: { width: '100%' } },
+              stores.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))
+            )
+          )
+        ),
+        (refDate || refLocation) && React.createElement('div', null,
+          React.createElement('div', { className: 'card', style: { background: 'var(--surface2)', padding: 12, marginBottom: 12 } },
+            React.createElement('div', { className: 'text-sm fw-600 mb-8' }, '引用値（各欄を直接修正できます）'),
+            React.createElement('div', { style: { maxHeight: 300, overflowY: 'auto' } },
+              React.createElement('table', null,
+                React.createElement('thead', null,
+                  React.createElement('tr', null,
+                    React.createElement('th', null, '商品名'),
+                    React.createElement('th', { className: 'text-right' }, '引用値(g)'),
+                    React.createElement('th', { className: 'text-right' }, '修正後(g)'),
+                  )
+                ),
+                React.createElement('tbody', null,
+                  products.map(prod => {
+                    const cand = refCandidates[prod.id] || 0;
+                    const val = refValues[prod.id] ?? cand;
+                    return React.createElement('tr', { key: prod.id },
+                      React.createElement('td', null, prod.name),
+                      React.createElement('td', { className: 'text-right', style: { color: 'var(--text2)' } },
+                        cand > 0 ? cand.toLocaleString() : React.createElement('span', { className: 'text-xs' }, '実績なし')
+                      ),
+                      React.createElement('td', { className: 'text-right' },
+                        React.createElement('input', {
+                          type: 'number', value: val||'', placeholder: '0',
+                          style: { width: 90, textAlign: 'right' },
+                          onChange: e => setRefValues(prev => ({ ...prev, [prod.id]: parseInt(e.target.value)||0 }))
+                        })
+                      )
+                    );
+                  })
+                )
+              )
+            )
+          ),
+          React.createElement('div', { className: 'flex gap-8' },
+            React.createElement('button', { className: 'btn btn-primary', onClick: applyRef }, '✅ この値を予想に適用'),
+            React.createElement('button', { className: 'btn btn-secondary', onClick: () => setRefModal(null) }, 'キャンセル'),
+          )
         )
       )
     ),
@@ -2184,32 +2302,36 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
               React.createElement('thead', null,
                 React.createElement('tr', null,
                   React.createElement('th', null, '商品'),
-                  ...storeSchedules.map(s => React.createElement('th', { key: s.id, className: 'text-right', style: { minWidth: 90 } },
+                  ...storeSchedules.map(s => React.createElement('th', { key: s.id, className: 'text-right', style: { minWidth: 100 } },
                     React.createElement('div', null, fmtDate(s.date)),
-                    React.createElement('div', { className: 'text-xs' }, s.location || '-')
+                    React.createElement('div', { className: 'text-xs' }, s.location || '-'),
+                    React.createElement('button', {
+                      className: 'btn btn-sm no-print',
+                      style: { fontSize: 10, padding: '2px 6px', marginTop: 3, background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent-light)', borderRadius: 4 },
+                      onClick: () => openRefModal(s),
+                      title: '過去データを引用して予想値を設定'
+                    }, '📎 参照')
                   )),
                   React.createElement('th', { className: 'text-right' }, '合計予想'),
                 )
               ),
               React.createElement('tbody', null,
                 products.map(prod => {
-                  const forecasts = storeSchedules.map(s => (forecastCache[s.id] || {})[prod.id] || 0);
-                  const total = forecasts.reduce((a, b) => a + b, 0);
+                  const forecasts = storeSchedules.map(s => (forecastCache[s.id]||{})[prod.id]||0);
+                  const total = forecasts.reduce((a,b) => a+b, 0);
                   const hasOverride = storeSchedules.some(s => overrides[s.id]?.[prod.id] !== undefined);
                   if (total === 0 && !hasOverride) return null;
                   return React.createElement('tr', { key: prod.id },
                     React.createElement('td', null, prod.limitedLabel
-                      ? React.createElement('span', null,
-                          React.createElement('span', { className: 'badge badge-amber', style: { marginRight: 4 } }, prod.limitedLabel),
-                          prod.name)
+                      ? React.createElement('span', null, React.createElement('span', { className: 'badge badge-amber', style: { marginRight: 4 } }, prod.limitedLabel), prod.name)
                       : prod.name
                     ),
                     ...storeSchedules.map((s, i) => {
-                      const isOverridden = overrides[s.id]?.[prod.id] !== undefined;
+                      const isRef = overrides[s.id]?.[prod.id] !== undefined;
                       return React.createElement('td', { key: s.id, className: 'text-right' },
                         React.createElement('span', {
                           className: 'no-print',
-                          style: { cursor: 'pointer', color: isOverridden ? 'var(--accent)' : 'inherit', fontWeight: isOverridden ? 600 : 400 },
+                          style: { cursor: 'pointer', color: isRef ? 'var(--accent)' : 'inherit', fontWeight: isRef ? 600 : 400 },
                           onClick: () => setEditOverride({ scheduleId: s.id, productId: prod.id, value: forecasts[i] }),
                           title: '✏ クリックして修正'
                         }, forecasts[i].toLocaleString()),
