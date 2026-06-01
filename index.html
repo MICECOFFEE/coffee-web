@@ -3456,7 +3456,7 @@ window._mountReactApp = function() {
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc }
+import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -3471,6 +3471,13 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
+
+// オフラインキャッシュを有効化（接続回復後に自動同期）
+enableIndexedDbPersistence(db).catch(e => {
+  if(e.code === 'failed-precondition') console.warn('複数タブ起動中のためオフラインキャッシュ無効');
+  else if(e.code === 'unimplemented') console.warn('このブラウザはオフラインキャッシュ非対応');
+});
+
 let currentUser = null;
 let saveTimer = null;
 
@@ -3528,13 +3535,24 @@ window._loadShiftFromFirestore = async (month) => {
   if(!currentUser) return null;
   try {
     const ref = doc(db, 'shift_schedules', currentUser.uid, 'data', month);
-    const snap = await getDoc(ref);
+    // タイムアウト8秒
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 8000)
+    );
+    const snap = await Promise.race([getDoc(ref), timeoutPromise]);
     if(snap.exists()) {
       return snap.data();
     }
     return null;
   } catch(e) {
-    console.error('シフト読み込みエラー:', e);
+    if(e.message === 'timeout') {
+      alert('Firebaseへの接続がタイムアウトしました。\nネットワーク接続を確認してから再度お試しください。');
+    } else if(e.message && e.message.includes('offline')) {
+      alert('オフライン状態です。\nネットワーク接続を確認してから再度お試しください。');
+    } else {
+      console.error('シフト読み込みエラー:', e);
+      alert('読み込みエラー: ' + e.message);
+    }
     return null;
   }
 };
