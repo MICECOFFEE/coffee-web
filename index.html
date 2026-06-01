@@ -3498,7 +3498,11 @@ async function loadFromFirestore() {
   if(!currentUser) return;
   try {
     const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
-    const snap = await getDoc(ref);
+    // タイムアウト5秒：接続が遅い場合はlocalStorageで起動
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 5000)
+    );
+    const snap = await Promise.race([getDoc(ref), timeoutPromise]);
     if(snap.exists()) {
       const d = snap.data();
       if(d && Object.keys(d).length > 0) {
@@ -3508,8 +3512,14 @@ async function loadFromFirestore() {
       }
     }
   } catch(e) {
-    console.error('Firestore読み込みエラー:', e);
-    fbSetStatus('読み込み失敗: ' + e.message);
+    if(e.message === 'timeout') {
+      console.warn('Firestore接続タイムアウト: localStorageのデータで起動します');
+      fbSetStatus('オフライン起動（後で同期）');
+      setTimeout(()=>fbSetStatus(''), 3000);
+    } else {
+      console.error('Firestore読み込みエラー:', e);
+      fbSetStatus('読み込み失敗: ' + e.message);
+    }
   }
 }
 
