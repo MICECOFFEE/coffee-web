@@ -1827,7 +1827,12 @@ function SchedulesPage({ schedules, setSchedules, stores, salesHistory }) {
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '取込む月'),
           React.createElement('input', { type: 'month', value: shiftFrom ? shiftFrom.slice(0,7) : '',
-            onChange: e => { setShiftFrom(e.target.value + '-01'); setShiftTo(e.target.value + '-31'); },
+            onChange: e => {
+              const [y, m] = e.target.value.split('-').map(Number);
+              const lastDay = new Date(y, m, 0).getDate(); // その月の末日を正確に取得
+              setShiftFrom(e.target.value + '-01');
+              setShiftTo(e.target.value + '-' + String(lastDay).padStart(2,'0'));
+            },
             style: { width: 140 } })
         ),
         React.createElement('button', {
@@ -3459,6 +3464,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
+// 焙煎販売アプリ用Firebaseプロジェクト（データ保存用）
 const firebaseConfig = {
   apiKey: "AIzaSyCwfI5rYvC1W2bS5aJbrVUHNuXJSlVOEPM",
   authDomain: "coffee-roast-app-dd3b2.firebaseapp.com",
@@ -3468,9 +3474,23 @@ const firebaseConfig = {
   appId: "1:982633953134:web:d1bcdac353995f509df37f"
 };
 
+// シフト管理アプリ用Firebaseプロジェクト（シフトデータ読み込み用）
+const shiftFirebaseConfig = {
+  apiKey: "AIzaSyCNxDr8wqq-dIfI7ns9mZ6GySQkP0qAN1I",
+  authDomain: "shift-app-920a1.firebaseapp.com",
+  projectId: "shift-app-920a1",
+  storageBucket: "shift-app-920a1.firebasestorage.app",
+  messagingSenderId: "393055910720",
+  appId: "1:393055910720:web:97b30c30b3f3b85ba758a5"
+};
+
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
+
+// シフト管理アプリのFirestoreに接続（別アプリとして初期化）
+const shiftApp = initializeApp(shiftFirebaseConfig, 'shift-app');
+const shiftDb = getFirestore(shiftApp);
 
 // オフラインキャッシュを有効化（接続回復後に自動同期）
 enableIndexedDbPersistence(db).catch(e => {
@@ -3534,7 +3554,8 @@ async function loadFromFirestore() {
 window._loadShiftFromFirestore = async (month) => {
   if(!currentUser) return null;
   try {
-    const ref = doc(db, 'shift_schedules', currentUser.uid, 'data', month);
+    // シフト管理アプリのFirestore（shift-app-920a1）から読み込む
+    const ref = doc(shiftDb, 'shift_schedules', currentUser.uid, 'data', month);
     // タイムアウト8秒
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('timeout')), 8000)
