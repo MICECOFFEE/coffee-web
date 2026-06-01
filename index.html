@@ -3555,7 +3555,9 @@ window._loadShiftFromFirestore = async (month) => {
   if(!currentUser) return null;
   try {
     // シフト管理アプリのFirestore（shift-app-920a1）から読み込む
-    const ref = doc(shiftDb, 'shift_schedules', currentUser.uid, 'data', month);
+    // シフト管理アプリのUID（shift-app-920a1で認証したUID）を使用
+    const SHIFT_APP_UID = '7ErjrJvJSVeSygeeWveSElVQn672';
+    const ref = doc(shiftDb, 'shift_schedules', SHIFT_APP_UID, 'data', month);
     // タイムアウト8秒
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('timeout')), 8000)
