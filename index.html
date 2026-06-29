@@ -1820,59 +1820,68 @@ function SchedulesPage({ schedules, setSchedules, stores, salesHistory }) {
           'シフト管理アプリのシフト表タブから「☕ コーヒー管理に共有」ボタンで共有したデータを取り込みます。'
         ),
         React.createElement('div', { style: { fontSize: 11, marginTop: 3, color: 'var(--text2)' } },
-          '取込む月を指定して「Firebaseから読み込む」ボタンを押してください。'
+          '取込む期間を指定して「Firebaseから読み込む」ボタンを押してください。月をまたいで取り込めます。'
         )
-      ),
-      React.createElement('div', { className: 'flex gap-12 items-center mb-12', style: { flexWrap: 'wrap' } },
-        React.createElement('div', { className: 'form-group' },
-          React.createElement('label', null, '取込む月'),
-          React.createElement('input', { type: 'month', value: shiftFrom ? shiftFrom.slice(0,7) : '',
-            onChange: e => {
-              const [y, m] = e.target.value.split('-').map(Number);
-              const lastDay = new Date(y, m, 0).getDate(); // その月の末日を正確に取得
-              setShiftFrom(e.target.value + '-01');
-              setShiftTo(e.target.value + '-' + String(lastDay).padStart(2,'0'));
-            },
-            style: { width: 140 } })
-        ),
-        React.createElement('button', {
-          className: 'btn btn-primary',
-          style: { marginTop: 20 },
-          onClick: async () => {
-            const month = shiftFrom ? shiftFrom.slice(0,7) : '';
-            if(!month) { alert('月を指定してください'); return; }
-            if(!window._loadShiftFromFirestore) { alert('Firebase未接続です'); return; }
-            setShiftMsg('読み込み中...');
-            const data = await window._loadShiftFromFirestore(month);
-            if(!data || !data.schedules || data.schedules.length === 0) {
-              setShiftMsg('データが見つかりません。シフト管理アプリから「☕ コーヒー管理に共有」ボタンで共有してください。');
-              setShiftAllRows([]);
-              return;
-            }
-            const rows = data.schedules.map(s => ({
-              date: s.date,
-              storeId: s.storeId,
-              storeRaw: s.carNo + '号車',
-              location: s.location,
-              staffName: s.staffName
-            }));
-            setShiftAllRows(rows);
-            setShiftMsg(data.updatedAt ? '共有日時: ' + new Date(data.updatedAt).toLocaleString('ja-JP') : '');
-          }
-        }, '📥 Firebaseから読み込む'),
-        shiftMsg && React.createElement('span', { style: { fontSize: 12, color: 'var(--text2)', marginTop: 20 } }, shiftMsg),
       ),
       React.createElement('div', { className: 'flex gap-12 items-center mb-12', style: { flexWrap: 'wrap' } },
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '取込開始日'),
           React.createElement('input', { type: 'date', value: shiftFrom,
-            onChange: e => setShiftFrom(e.target.value), style: { width: 140 } })
+            onChange: e => setShiftFrom(e.target.value), style: { width: 150 } })
         ),
+        React.createElement('div', { style: { marginTop: 20, color: 'var(--text2)' } }, '〜'),
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '取込終了日'),
           React.createElement('input', { type: 'date', value: shiftTo,
-            onChange: e => setShiftTo(e.target.value), style: { width: 140 } })
+            onChange: e => setShiftTo(e.target.value), style: { width: 150 } })
         ),
+        React.createElement('button', {
+          className: 'btn btn-primary',
+          style: { marginTop: 20 },
+          onClick: async () => {
+            if(!shiftFrom || !shiftTo) { alert('取込開始日と取込終了日を指定してください'); return; }
+            if(!window._loadShiftFromFirestore) { alert('Firebase未接続です'); return; }
+
+            // 開始月〜終了月の月リストを生成
+            const [fy, fm] = shiftFrom.slice(0,7).split('-').map(Number);
+            const [ty, tm] = shiftTo.slice(0,7).split('-').map(Number);
+            const months = [];
+            let cy = fy, cm = fm;
+            while (cy < ty || (cy === ty && cm <= tm)) {
+              months.push(`${cy}-${String(cm).padStart(2,'0')}`);
+              cm++;
+              if (cm > 12) { cm = 1; cy++; }
+            }
+
+            setShiftMsg(`読み込み中... (${months.length}ヶ月分)`);
+            const allRows = [];
+            let loadedMonths = 0;
+
+            for (const month of months) {
+              const data = await window._loadShiftFromFirestore(month);
+              if (data && data.schedules && data.schedules.length > 0) {
+                const rows = data.schedules.map(s => ({
+                  date: s.date,
+                  storeId: s.storeId,
+                  storeRaw: s.carNo + '号車',
+                  location: s.location,
+                  staffName: s.staffName
+                }));
+                allRows.push(...rows);
+                loadedMonths++;
+              }
+            }
+
+            if (allRows.length === 0) {
+              setShiftMsg('データが見つかりません。シフト管理アプリから「☕ コーヒー管理に共有」ボタンで共有してください。');
+              setShiftAllRows([]);
+              return;
+            }
+            setShiftAllRows(allRows);
+            setShiftMsg(`読み込み完了: ${loadedMonths}ヶ月分 / ${allRows.length}件`);
+          }
+        }, '📥 Firebaseから読み込む'),
+        shiftMsg && React.createElement('span', { style: { fontSize: 12, color: 'var(--text2)', marginTop: 20 } }, shiftMsg),
       ),
       shiftPreview.length > 0 && React.createElement('div', { style: { marginBottom: 10 } },
         React.createElement('div', { className: 'flex items-center justify-between mb-8' },
@@ -2071,7 +2080,7 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
   const upcomingSchedules = useMemo(() =>
     schedules
       .map(s => ({ ...s, _nd: normalizeDate(s.date) || '' }))
-      .filter(s => s._nd && s._nd >= today && s.storeId && (!filterStore || s.storeId === filterStore))
+      .filter(s => s._nd && s._nd >= today && (!filterStore || s.storeId === filterStore))
       .sort((a, b) => (a.storeId || '').localeCompare(b.storeId || '') || (a._nd || '').localeCompare(b._nd || '')),
     [schedules, today, filterStore]
   );
