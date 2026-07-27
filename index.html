@@ -311,6 +311,7 @@ const DEFAULT_STORES = [
   { id: 's6', name: '6号車' },
   { id: 's7', name: '7号車' },
   { id: 's8', name: '8号車' },
+  { id: 's9', name: '9号車' },
 ];
 
 const BAG_WEIGHT = 5000; // g
@@ -323,6 +324,7 @@ function generateId() { return 'id_' + Math.random().toString(36).substr(2, 9); 
 function DropZone({ onFile, accept, message, subMessage, status }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
+  const dropRef = useRef(null);
 
   function handleDrop(e) {
     e.preventDefault();
@@ -331,17 +333,29 @@ function DropZone({ onFile, accept, message, subMessage, status }) {
     const file = e.dataTransfer?.files?.[0];
     if (file) onFile(file);
   }
-  function handleDragOver(e) { e.preventDefault(); setDragging(true); }
-  function handleDragLeave(e) { e.preventDefault(); setDragging(false); }
+  function handleDragEnter(e) { e.preventDefault(); e.stopPropagation(); setDragging(true); }
+  function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); setDragging(true); }
+  function handleDragLeave(e) {
+    e.preventDefault(); e.stopPropagation();
+    // dropRef内にマウスがまだある場合はdraggingを維持
+    if (dropRef.current && dropRef.current.contains(e.relatedTarget)) return;
+    setDragging(false);
+  }
   function handleChange(e) {
     const file = e.target.files?.[0];
     if (file) onFile(file);
     e.target.value = '';
   }
+  function handleClick(e) {
+    // ドラッグ中はクリックイベントを無視
+    if (!dragging) inputRef.current?.click();
+  }
 
   return React.createElement('div', {
-    onClick: () => inputRef.current?.click(),
+    ref: dropRef,
+    onClick: handleClick,
     onDrop: handleDrop,
+    onDragEnter: handleDragEnter,
     onDragOver: handleDragOver,
     onDragLeave: handleDragLeave,
     style: {
@@ -353,6 +367,7 @@ function DropZone({ onFile, accept, message, subMessage, status }) {
       background: dragging ? 'var(--accent-bg)' : 'var(--surface)',
       transition: 'all 0.15s',
       userSelect: 'none',
+      position: 'relative',
     }
   },
     React.createElement('div', { style: { fontSize: 32, marginBottom: 8 } }, dragging ? '📥' : '📂'),
@@ -483,7 +498,13 @@ function _initFromFirestore(data) {
 function App() {
   const [page, setPage] = useState('dashboard');
   const [products, setProducts] = useState(() => loadState('products', DEFAULT_PRODUCTS));
-  const [stores, setStores] = useState(() => loadState('stores', DEFAULT_STORES));
+  const [stores, setStores] = useState(() => {
+    const saved = loadState('stores', DEFAULT_STORES);
+    // DEFAULT_STORESに追加された号車がsavedにない場合は自動追加
+    const savedIds = new Set(saved.map(s => s.id));
+    const missing = DEFAULT_STORES.filter(s => !savedIds.has(s.id));
+    return missing.length > 0 ? [...saved, ...missing] : saved;
+  });
   const [salesHistory, setSalesHistory] = useState(() => loadState('salesHistory', []));
   const [schedules, setSchedules] = useState(() => loadState('schedules', [])); // [{id, storeId, date, location, altLocation, altStoreId, forecastOverrides:{productId:g}}]
   const [storeInventory, setStoreInventory] = useState(() => loadState('storeInventory', {})); // {storeId: {productId: g}}
@@ -1420,15 +1441,54 @@ function SchedulesPage({ schedules, setSchedules, stores, salesHistory }) {
   // シフトプレビューをスケジュールに取り込む
   function commitShiftImport() {
     if (!shiftPreview.length) return;
-    const toAdd = shiftPreview.map(r => ({
-      id: generateId(), storeId: r.storeId, date: r.date,
-      location: r.location, deliveryDate: '', altLocation: '', altStoreId: ''
-    }));
+
+    // carNoから storeId を解決・なければ自動追加
+    // shiftPreviewのstoreRaw（例：「9号車」）からstoresを照合
+    const newStores = [...stores];
+    const resolvedRows = shiftPreview.map(r => {
+      let storeId = r.storeId;
+
+      // storeId が既存店舗にあるか確認
+      const exists = newStores.find(s => s.id === storeId);
+      if (!exists && r.storeRaw) {
+        // 号車名で照合
+        const byName = newStores.find(s =>
+          s.name === r.storeRaw ||
+          normalizeStr(s.name) === normalizeStr(r.storeRaw)
+        );
+        if (byName) {
+          storeId = byName.id;
+        } else {
+          // 新規号車として自動追加
+          // carNo から s{N} 形式のIDを生成（例：10号車 → s10）
+          const carNumMatch = r.storeRaw.match(/(\d+)/);
+          const newId = carNumMatch ? `s${carNumMatch[1]}` : generateId();
+          // 同じIDが既にないか確認
+          if (!newStores.find(s => s.id === newId)) {
+            newStores.push({ id: newId, name: r.storeRaw });
+            console.log(`新規店舗自動追加: ${newId} = ${r.storeRaw}`);
+          }
+          storeId = newId;
+        }
+      }
+      return { id: generateId(), storeId, date: r.date,
+        location: r.location, deliveryDate: '', altLocation: '', altStoreId: '' };
+    });
+
+    // 新規店舗があれば stores を更新
+    if (newStores.length > stores.length) {
+      setStores(newStores);
+    }
+
     setSchedules(prev => {
       const existing = new Set(prev.map(s => `${s.date}|${s.storeId}`));
-      const filtered = toAdd.filter(s => !existing.has(`${s.date}|${s.storeId}`));
-      const dup = toAdd.length - filtered.length;
-      setShiftMsg(`取込完了: ${filtered.length}件追加${dup>0?`（重複${dup}件スキップ）`:''}`);
+      const filtered = resolvedRows.filter(s => !existing.has(`${s.date}|${s.storeId}`));
+      const dup = resolvedRows.length - filtered.length;
+      const newStoreCount = newStores.length - stores.length;
+      let msg = `取込完了: ${filtered.length}件追加`;
+      if (dup > 0) msg += `（重複${dup}件スキップ）`;
+      if (newStoreCount > 0) msg += `、新規店舗${newStoreCount}件自動追加`;
+      setShiftMsg(msg);
       return [...prev, ...filtered];
     });
     setShiftPreview([]);
@@ -1860,13 +1920,18 @@ function SchedulesPage({ schedules, setSchedules, stores, salesHistory }) {
             for (const month of months) {
               const data = await window._loadShiftFromFirestore(month);
               if (data && data.schedules && data.schedules.length > 0) {
-                const rows = data.schedules.map(s => ({
-                  date: s.date,
-                  storeId: s.storeId,
-                  storeRaw: s.carNo + '号車',
-                  location: s.location,
-                  staffName: s.staffName
-                }));
+                const rows = data.schedules.map(s => {
+                  // carNo（号車番号）からstoreIdを解決
+                  // シフト管理アプリのstoreIdは「s1」〜「sN」形式
+                  // carNoが数字の場合は「s{carNo}」に変換
+                  let storeId = s.storeId || '';
+                  const storeRaw = s.carNo ? s.carNo + '号車' : storeId;
+                  // carNoから sN 形式のIDを生成（例：carNo=10 → s10）
+                  if (s.carNo && !storeId) {
+                    storeId = `s${s.carNo}`;
+                  }
+                  return { date: s.date, storeId, storeRaw, location: s.location, staffName: s.staffName };
+                });
                 allRows.push(...rows);
                 loadedMonths++;
               }
