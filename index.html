@@ -2400,6 +2400,16 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
                   const total = forecasts.reduce((a,b) => a+b, 0);
                   const hasOverride = storeSchedules.some(s => overrides[s.id]?.[prod.id] !== undefined);
                   if (total === 0 && !hasOverride) return null;
+
+                  // 在庫残量を累積計算
+                  const currentStock = (storeInventory[storeId] || {})[prod.id] || 0;
+                  const remainAfter = []; // 各日程後の残量
+                  let remaining = currentStock;
+                  for (let i = 0; i < forecasts.length; i++) {
+                    remaining -= forecasts[i];
+                    remainAfter.push(remaining);
+                  }
+
                   return React.createElement('tr', { key: prod.id },
                     React.createElement('td', null, prod.limitedLabel
                       ? React.createElement('span', null, React.createElement('span', { className: 'badge badge-amber', style: { marginRight: 4 } }, prod.limitedLabel), prod.name)
@@ -2407,18 +2417,54 @@ function ForecastPage({ schedules, stores, products, salesHistory, productMappin
                     ),
                     ...storeSchedules.map((s, i) => {
                       const isRef = overrides[s.id]?.[prod.id] !== undefined;
-                      return React.createElement('td', { key: s.id, className: 'text-right' },
-                        React.createElement('span', {
-                          className: 'no-print',
-                          style: { cursor: 'pointer', color: isRef ? 'var(--accent)' : 'inherit', fontWeight: isRef ? 600 : 400 },
-                          onClick: () => setEditOverride({ scheduleId: s.id, productId: prod.id, value: forecasts[i] }),
-                          title: '✏ クリックして修正'
-                        }, forecasts[i].toLocaleString()),
-                        React.createElement('span', { className: 'print-only', style: { display: 'none' } }, forecasts[i].toLocaleString()),
-                        React.createElement('span', { className: 'text-xs' }, 'g')
+                      const remain = remainAfter[i];
+                      const shortage = remain < 0; // 在庫がマイナス（不足）
+                      const warning = remain >= 0 && remain < minStock; // 最低在庫を下回る
+                      const cellBg = shortage ? 'rgba(220,50,50,0.08)' : warning ? 'rgba(255,160,0,0.08)' : 'inherit';
+                      const valColor = shortage ? 'var(--red)' : isRef ? 'var(--accent)' : 'inherit';
+                      return React.createElement('td', { key: s.id, className: 'text-right',
+                        style: { background: cellBg, verticalAlign: 'top', padding: '6px 10px' }
+                      },
+                        // 販売予想量
+                        React.createElement('div', null,
+                          React.createElement('span', {
+                            className: 'no-print',
+                            style: { cursor: 'pointer', color: valColor, fontWeight: (shortage || isRef) ? 700 : 400 },
+                            onClick: () => setEditOverride({ scheduleId: s.id, productId: prod.id, value: forecasts[i] }),
+                            title: '✏ クリックして修正'
+                          }, forecasts[i].toLocaleString()),
+                          React.createElement('span', { className: 'print-only', style: { display: 'none' } }, forecasts[i].toLocaleString()),
+                          React.createElement('span', { className: 'text-xs' }, 'g')
+                        ),
+                        // 残量表示（在庫が登録されている場合のみ）
+                        currentStock > 0 && React.createElement('div', {
+                          style: {
+                            fontSize: 10,
+                            color: shortage ? 'var(--red)' : warning ? 'var(--amber)' : 'var(--text3)',
+                            marginTop: 2,
+                            fontWeight: shortage ? 700 : 400,
+                          }
+                        }, shortage
+                          ? `残 ${remain.toLocaleString()}g ⚠`
+                          : warning
+                            ? `残 ${remain.toLocaleString()}g △`
+                            : `残 ${remain.toLocaleString()}g`
+                        )
                       );
                     }),
-                    React.createElement('td', { className: 'text-right fw-600' }, total.toLocaleString(), React.createElement('span', { className: 'text-xs' }, 'g'))
+                    React.createElement('td', { className: 'text-right fw-600', style: { verticalAlign: 'top' } },
+                      total.toLocaleString(), React.createElement('span', { className: 'text-xs' }, 'g'),
+                      // 合計列に在庫充足日数を表示
+                      currentStock > 0 && React.createElement('div', { style: { fontSize: 10, color: 'var(--text3)', marginTop: 2 } },
+                        (() => {
+                          const shortageIdx = remainAfter.findIndex(r => r < 0);
+                          if (shortageIdx === -1) return React.createElement('span', { style: { color: 'var(--green)' } }, '✅ 充足');
+                          return React.createElement('span', { style: { color: 'var(--red)', fontWeight: 600 } },
+                            `⚠ ${fmtDate(storeSchedules[shortageIdx].date)}不足`
+                          );
+                        })()
+                      )
+                    )
                   );
                 }).filter(Boolean)
               )
