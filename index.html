@@ -3568,11 +3568,15 @@ function BackupPage({ products, stores, salesHistory, schedules, storeInventory,
 // ===== マウント（ログイン後に実行） =====
 window._mountReactApp = function() {
   const appEl = document.getElementById('app');
-  if(appEl && !appEl._reactRoot) {
-    const root = ReactDOM.createRoot(appEl);
-    root.render(React.createElement(App));
-    appEl._reactRoot = true;
+  if(!appEl) return;
+  // 既存のReactルートを破棄して再作成
+  if(appEl._reactRootInstance) {
+    try { appEl._reactRootInstance.unmount(); } catch(e) {}
   }
+  appEl.innerHTML = '';
+  const root = ReactDOM.createRoot(appEl);
+  root.render(React.createElement(App));
+  appEl._reactRootInstance = root;
 };
 
 </script>
@@ -3645,9 +3649,9 @@ async function loadFromFirestore() {
   if(!currentUser) return;
   try {
     const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
-    // タイムアウト5秒：接続が遅い場合はlocalStorageで起動
+    // タイムアウト10秒
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 5000)
+      setTimeout(() => reject(new Error('timeout')), 10000)
     );
     const snap = await Promise.race([getDoc(ref), timeoutPromise]);
     if(snap.exists()) {
@@ -3660,14 +3664,16 @@ async function loadFromFirestore() {
     }
   } catch(e) {
     if(e.message === 'timeout') {
-      console.warn('Firestore接続タイムアウト: localStorageのデータで起動します');
-      fbSetStatus('オフライン起動（後で同期）');
-      setTimeout(()=>fbSetStatus(''), 3000);
+      console.warn('Firestore接続タイムアウト: 空のデータで起動します');
+      fbSetStatus('接続タイムアウト（再読込してください）');
+      setTimeout(()=>fbSetStatus(''), 5000);
     } else {
       console.error('Firestore読み込みエラー:', e);
       fbSetStatus('読み込み失敗: ' + e.message);
     }
   }
+  // データ取得の成否にかかわらずReactをマウント
+  if(window._mountReactApp) window._mountReactApp();
 }
 
 // シフト管理アプリからスケジュールを読み込む
@@ -3725,9 +3731,8 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-body').style.display = 'block';
     document.getElementById('fb-user-name').textContent = user.displayName;
-    // Firestoreからデータを読み込んでからReactをマウント
+    // Firestoreからデータを読み込む（完了後にReactマウントされる）
     await loadFromFirestore();
-    if(window._mountReactApp) window._mountReactApp();
   } else {
     currentUser = null;
     document.getElementById('login-screen').style.display = 'flex';
