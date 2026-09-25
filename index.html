@@ -501,9 +501,16 @@ function saveState(key, value) {
   if((!s || s.length === 0) && (!h || h.length === 0)) return;
   if(window._saveToFirestore) window._saveToFirestore(_localCache);
 }
+// 診断用：主要データの件数を文字列化
+function _dataSummary(d) {
+  if(!d) return '(なし)';
+  const n = v => Array.isArray(v) ? v.length : (v && typeof v === 'object') ? Object.keys(v).length : (v === undefined ? '-' : v);
+  return `schedules=${n(d.schedules)} salesHistory=${n(d.salesHistory)} products=${n(d.products)} stores=${n(d.stores)} storeInventory=${n(d.storeInventory)} deliveries=${n(d.deliveries)}`;
+}
 function _initFromFirestore(data) {
   if(!data) return;
   console.log('Firestore読み込みデータ:', Object.keys(data));
+  console.log('[Firestore] 読込件数:', _dataSummary(data));
   Object.keys(data).forEach(k => { _localCache[k] = data[k]; });
   _firestoreLoaded = true;
   // React stateへの反映コールバックを呼ぶ
@@ -568,10 +575,13 @@ function App() {
       _firestoreLoaded = true;
     };
     console.log('[Firestore] _onFirestoreLoad コールバック登録');
-    // 登録前に届いていたデータがあれば適用
-    if(_pendingFirestoreData) {
-      const d = _pendingFirestoreData;
+    console.log('[Firestore] マウント時のReact state件数:', _dataSummary({ schedules, salesHistory, products, stores, storeInventory, deliveries }));
+    // マウント直後：読込済みならデータをReact stateへ即時流し込む
+    // （useStateの初期値で入っているはずだが、取りこぼし対策として確実に反映）
+    if(_pendingFirestoreData || _firestoreLoaded) {
+      const d = _pendingFirestoreData || { ..._localCache };
       _pendingFirestoreData = null;
+      console.log('[Firestore] マウント直後に_localCacheをstateへ反映:', _dataSummary(d));
       _onFirestoreLoad(d);
     }
     return () => { _onFirestoreLoad = null; };
@@ -3626,8 +3636,7 @@ window._mountReactApp = function() {
     try { appEl._reactRootInstance.unmount(); } catch(e) {}
   }
   appEl.innerHTML = '';
-  // 描画時にuseStateが_localCacheを読むため、保留データは不要
-  _pendingFirestoreData = null;
+  console.log('[Firestore] _mountReactApp: _firestoreLoaded=' + _firestoreLoaded + ' / _localCache件数:', _dataSummary(_localCache));
   const root = ReactDOM.createRoot(appEl);
   root.render(React.createElement(App));
   appEl._reactRootInstance = root;
@@ -3766,6 +3775,10 @@ async function loadFromFirestore() {
   const t0 = performance.now();
   const elapsed = () => ((performance.now() - t0) / 1000).toFixed(2) + '秒';
   console.log('[Firestore] 読込開始');
+  try {
+    const b = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null');
+    console.log('[Backup] ローカルバックアップ:', b ? new Date(b.savedAt).toLocaleString('ja-JP') + ' ' + _dataSummary(b.data) : '(なし)');
+  } catch(e) {}
   showConnecting('Firestoreに接続中...');
 
   const ref = doc(db, 'coffee_users', user.uid, 'data', 'main');
@@ -3855,6 +3868,7 @@ window._saveToFirestore = async (data) => {
       // undefinedの値を除去してからFirestoreに保存
       const cleanData = JSON.parse(JSON.stringify(data, (key, val) => val === undefined ? null : val));
       console.log('Firestore保存データ:', Object.keys(cleanData), '件');
+      console.log('[Firestore] 保存件数:', _dataSummary(cleanData));
       await setDoc(ref, cleanData);
       recordBackup(cleanData);
       fbSetStatus('✓ 保存済み');
