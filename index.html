@@ -269,6 +269,7 @@
 <div id="app-body" style="display:none;">
   <div class="fb-user-bar">
     <span class="fb-save-status" id="fb-save-status"></span>
+    <span class="fb-save-status" id="fb-last-saved"></span>
     <span id="fb-user-name"></span>
     <button class="fb-logout-btn" onclick="doSignOut()">ログアウト</button>
   </div>
@@ -491,6 +492,10 @@ function saveState(key, value) {
   _localCache[key] = value;
   // Firestoreが読み込まれる前は保存しない（空データ上書き防止）
   if(!_firestoreLoaded) return;
+  // schedules と salesHistory が両方空の場合も保存しない（念のための二重防止）
+  const s = _localCache.schedules;
+  const h = _localCache.salesHistory;
+  if((!s || s.length === 0) && (!h || h.length === 0)) return;
   if(window._saveToFirestore) window._saveToFirestore(_localCache);
 }
 function _initFromFirestore(data) {
@@ -3677,39 +3682,82 @@ window.doSignOut = async () => {
   if(confirm('ログアウトしますか？')) await signOut(auth);
 };
 
+// ===== 自動バックアップ（localStorage）・前回保存表示 =====
+const LAST_SAVED_KEY = 'coffee_lastSavedAt';
+const BACKUP_KEY = 'coffee_backup_latest';
+
+function formatAgo(ts) {
+  const diffMin = Math.floor((Date.now() - ts) / 60000);
+  if(diffMin < 1) return 'たった今';
+  if(diffMin < 60) return diffMin + '分前';
+  const diffH = Math.floor(diffMin / 60);
+  if(diffH < 24) return diffH + '時間前';
+  return Math.floor(diffH / 24) + '日前';
+}
+
+function showLastSaved() {
+  const el = document.getElementById('fb-last-saved');
+  if(!el) return;
+  let ts = null;
+  try { ts = Number(localStorage.getItem(LAST_SAVED_KEY)) || null; } catch(e) {}
+  el.textContent = ts ? '前回保存: ' + formatAgo(ts) : '';
+  el.title = ts ? new Date(ts).toLocaleString('ja-JP') : '';
+}
+
+function recordBackup(cleanData) {
+  const now = Date.now();
+  try { localStorage.setItem(LAST_SAVED_KEY, String(now)); } catch(e) {}
+  try {
+    localStorage.setItem(BACKUP_KEY, JSON.stringify({ savedAt: now, data: cleanData }));
+  } catch(e) {
+    console.warn('ローカルバックアップ保存失敗（容量超過の可能性）:', e);
+  }
+  showLastSaved();
+}
+setInterval(showLastSaved, 60000);
+
+// getDocの結果を反映（成功時のみ保存を許可する）
+function applyLoadedSnap(snap) {
+  if(snap.exists()) {
+    const d = snap.data();
+    if(d && Object.keys(d).length > 0) {
+      _initFromFirestore(d); // ← _localCache更新＋React state反映＋保存許可
+      fbSetStatus('復元完了');
+      setTimeout(()=>fbSetStatus(''), 2000);
+      return;
+    }
+  }
+  // ドキュメントが存在しない／空の場合は新規ユーザーとして保存を許可
+  _firestoreLoaded = true;
+}
+
 async function loadFromFirestore() {
   if(!currentUser) return;
+  showLastSaved();
+  const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
+  const getPromise = getDoc(ref);
   try {
-    const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('timeout')), 10000)
     );
-    const snap = await Promise.race([getDoc(ref), timeoutPromise]);
-    if(snap.exists()) {
-      const d = snap.data();
-      if(d && Object.keys(d).length > 0) {
-        _initFromFirestore(d); // ← ここでReact stateも更新される
-        fbSetStatus('復元完了');
-        setTimeout(()=>fbSetStatus(''), 2000);
-      } else {
-        // データが空の場合も保存を許可
-        _firestoreLoaded = true;
-      }
-    } else {
-      // ドキュメントが存在しない場合も保存を許可
-      _firestoreLoaded = true;
-    }
+    const snap = await Promise.race([getPromise, timeoutPromise]);
+    applyLoadedSnap(snap);
   } catch(e) {
+    // タイムアウト・エラー時は保存を許可しない（空データでFirestoreを上書きしないため）
     if(e.message === 'timeout') {
-      console.warn('Firestore接続タイムアウト');
-      fbSetStatus('接続タイムアウト（再読込してください）');
-      setTimeout(()=>fbSetStatus(''), 5000);
-      // タイムアウトでも保存は許可（ただし空データ上書きは防止済み）
-      _firestoreLoaded = true;
+      console.warn('Firestore接続タイムアウト: 読み込み完了まで保存を停止します');
+      fbSetStatus('接続待ち（読み込み完了まで保存停止中）');
+      // 遅れて届いたデータもReact stateに反映する（_onFirestoreLoad経由）
+      getPromise.then(snap => {
+        console.log('Firestore読み込み（遅延）完了');
+        applyLoadedSnap(snap);
+      }).catch(err => {
+        console.error('Firestore読み込みエラー:', err);
+        fbSetStatus('読み込み失敗（再読込してください）');
+      });
     } else {
       console.error('Firestore読み込みエラー:', e);
-      fbSetStatus('読み込み失敗: ' + e.message);
-      _firestoreLoaded = true;
+      fbSetStatus('読み込み失敗（再読込してください）: ' + e.message);
     }
   }
   // 必ずReactをマウント
@@ -3756,6 +3804,7 @@ window._saveToFirestore = async (data) => {
       const cleanData = JSON.parse(JSON.stringify(data, (key, val) => val === undefined ? null : val));
       console.log('Firestore保存データ:', Object.keys(cleanData), '件');
       await setDoc(ref, cleanData);
+      recordBackup(cleanData);
       fbSetStatus('✓ 保存済み');
       setTimeout(()=>fbSetStatus(''), 2000);
     } catch(e) {
