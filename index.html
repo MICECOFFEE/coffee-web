@@ -200,6 +200,7 @@
 .fb-logout-btn{padding:4px 12px;border-radius:99px;border:1px solid rgba(255,255,255,0.4);background:transparent;color:white;cursor:pointer;font-size:12px;}
 .fb-logout-btn:hover{background:rgba(255,255,255,0.15);}
 .fb-save-status{font-size:11px;opacity:0.75;}
+.fb-connecting{background:#FFF4D6;color:#6B4E16;border-bottom:1px solid #E8D29A;padding:10px 16px;font-size:13px;text-align:center;}
 
 /* スマートフォン対応 */
 @media (max-width: 768px) and (not print) {
@@ -273,6 +274,7 @@
     <span id="fb-user-name"></span>
     <button class="fb-logout-btn" onclick="doSignOut()">ログアウト</button>
   </div>
+  <div id="fb-connecting" class="fb-connecting" style="display:none;">Firestoreに接続中...</div>
   <div id="app"></div>
 </div>
 
@@ -483,6 +485,7 @@ function productNameMatch(csvName, productName) {
 const _localCache = {};
 let _firestoreLoaded = false;
 let _onFirestoreLoad = null; // Firestoreデータ到着時のコールバック
+let _pendingFirestoreData = null; // コールバック未登録時に届いたデータ（登録時に適用）
 
 function loadState(key, defaultValue) {
   if(_localCache[key] !== undefined) return _localCache[key];
@@ -504,7 +507,12 @@ function _initFromFirestore(data) {
   Object.keys(data).forEach(k => { _localCache[k] = data[k]; });
   _firestoreLoaded = true;
   // React stateへの反映コールバックを呼ぶ
-  if(_onFirestoreLoad) _onFirestoreLoad(data);
+  if(_onFirestoreLoad) {
+    _onFirestoreLoad(data);
+  } else {
+    // Reactの描画後・useEffect実行前に届いた場合に備えて保持
+    _pendingFirestoreData = data;
+  }
 }
 
 // ===== メインアプリ =====
@@ -559,6 +567,13 @@ function App() {
       // Firestore読込完了後に保存を有効化
       _firestoreLoaded = true;
     };
+    console.log('[Firestore] _onFirestoreLoad コールバック登録');
+    // 登録前に届いていたデータがあれば適用
+    if(_pendingFirestoreData) {
+      const d = _pendingFirestoreData;
+      _pendingFirestoreData = null;
+      _onFirestoreLoad(d);
+    }
     return () => { _onFirestoreLoad = null; };
   }, []);
 
@@ -3611,6 +3626,8 @@ window._mountReactApp = function() {
     try { appEl._reactRootInstance.unmount(); } catch(e) {}
   }
   appEl.innerHTML = '';
+  // 描画時にuseStateが_localCacheを読むため、保留データは不要
+  _pendingFirestoreData = null;
   const root = ReactDOM.createRoot(appEl);
   root.render(React.createElement(App));
   appEl._reactRootInstance = root;
@@ -3731,37 +3748,72 @@ function applyLoadedSnap(snap) {
   _firestoreLoaded = true;
 }
 
+const LOAD_TIMEOUT_MS = 20000;   // この時間を過ぎたらデータ未読込のまま画面を表示（保存は停止）
+const LOAD_MAX_ATTEMPTS = 10;    // getDocがエラーになった場合の最大試行回数
+const LOAD_RETRY_DELAY_MS = 3000;
+
+function showConnecting(msg) {
+  const el = document.getElementById('fb-connecting');
+  if(!el) return;
+  el.textContent = msg || '';
+  el.style.display = msg ? 'block' : 'none';
+}
+
 async function loadFromFirestore() {
   if(!currentUser) return;
+  const user = currentUser;
   showLastSaved();
-  const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
-  const getPromise = getDoc(ref);
-  try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 10000)
-    );
-    const snap = await Promise.race([getPromise, timeoutPromise]);
-    applyLoadedSnap(snap);
-  } catch(e) {
-    // タイムアウト・エラー時は保存を許可しない（空データでFirestoreを上書きしないため）
-    if(e.message === 'timeout') {
-      console.warn('Firestore接続タイムアウト: 読み込み完了まで保存を停止します');
-      fbSetStatus('接続待ち（読み込み完了まで保存停止中）');
-      // 遅れて届いたデータもReact stateに反映する（_onFirestoreLoad経由）
-      getPromise.then(snap => {
-        console.log('Firestore読み込み（遅延）完了');
-        applyLoadedSnap(snap);
-      }).catch(err => {
-        console.error('Firestore読み込みエラー:', err);
-        fbSetStatus('読み込み失敗（再読込してください）');
-      });
-    } else {
-      console.error('Firestore読み込みエラー:', e);
-      fbSetStatus('読み込み失敗（再読込してください）: ' + e.message);
+  const t0 = performance.now();
+  const elapsed = () => ((performance.now() - t0) / 1000).toFixed(2) + '秒';
+  console.log('[Firestore] 読込開始');
+  showConnecting('Firestoreに接続中...');
+
+  const ref = doc(db, 'coffee_users', user.uid, 'data', 'main');
+  let mounted = false;
+  let loaded = false;
+  const mountOnce = (reason) => {
+    if(mounted || currentUser !== user) return;
+    mounted = true;
+    console.log(`[Firestore] Reactマウント（${reason}） ${elapsed()} / _firestoreLoaded=${_firestoreLoaded}`);
+    if(window._mountReactApp) window._mountReactApp();
+  };
+
+  // タイムアウト時：データ未読込のまま画面を表示（保存は停止したまま）、届き次第即反映
+  const timeoutId = setTimeout(() => {
+    if(loaded) return;
+    console.warn(`[Firestore] ${LOAD_TIMEOUT_MS / 1000}秒タイムアウト: 未読込のまま表示（保存停止中）`);
+    showConnecting('Firestoreに接続中...（データ未読込のため保存を停止しています。届き次第表示されます）');
+    mountOnce('timeout');
+  }, LOAD_TIMEOUT_MS);
+
+  // 取得できるまでリトライ（オフライン判定などのエラー対策）
+  for(let attempt = 1; attempt <= LOAD_MAX_ATTEMPTS; attempt++) {
+    if(currentUser !== user) { clearTimeout(timeoutId); return; }
+    try {
+      const snap = await getDoc(ref);
+      console.log(`[Firestore] getDoc完了 ${elapsed()}（${attempt}回目, fromCache=${snap.metadata.fromCache}, exists=${snap.exists()}）`);
+      // キャッシュから「存在しない」と返った場合はサーバー未確認なので再試行
+      if(!snap.exists() && snap.metadata.fromCache) throw new Error('cache-miss');
+      if(currentUser !== user) { clearTimeout(timeoutId); return; }
+      loaded = true;
+      clearTimeout(timeoutId);
+      applyLoadedSnap(snap);
+      console.log(`[Firestore] _initFromFirestore完了 ${elapsed()} / マウント済み=${mounted} / コールバック登録=${!!_onFirestoreLoad}`);
+      showConnecting('');
+      mountOnce('loaded');
+      return;
+    } catch(e) {
+      console.warn(`[Firestore] getDoc失敗（${attempt}回目, ${elapsed()}）:`, e.code || e.message);
+      if(attempt < LOAD_MAX_ATTEMPTS) await new Promise(r => setTimeout(r, LOAD_RETRY_DELAY_MS));
     }
   }
-  // 必ずReactをマウント
-  if(window._mountReactApp) window._mountReactApp();
+
+  // すべて失敗：保存は停止したまま
+  clearTimeout(timeoutId);
+  console.error(`[Firestore] 読込失敗（${elapsed()}）: 保存を停止したまま表示します`);
+  fbSetStatus('⚠ 読み込み失敗');
+  showConnecting('⚠ Firestoreからデータを読み込めませんでした。保存を停止しています。ページを再読込してください。');
+  mountOnce('failed');
 }
 
 // シフト管理アプリからスケジュールを読み込む
@@ -3825,6 +3877,7 @@ onAuthStateChanged(auth, async (user) => {
   } else {
     currentUser = null;
     _firestoreLoaded = false; // ログアウト時にリセット
+    showConnecting('');
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app-body').style.display = 'none';
   }
