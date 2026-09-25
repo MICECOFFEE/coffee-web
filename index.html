@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>コーヒー販売量・焙煎管理アプリ</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
 <style>
   :root {
     --bg: #faf8f5;
@@ -3648,7 +3649,8 @@ window._mountReactApp = function() {
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence }
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+         doc, setDoc, getDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // 焙煎販売アプリ用Firebaseプロジェクト（データ保存用）
@@ -3673,17 +3675,20 @@ const shiftFirebaseConfig = {
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
-const db = getFirestore(fbApp);
+// オフラインキャッシュ（IndexedDB）を有効化して初期化（複数タブ対応・接続回復後に自動同期）
+let db;
+try {
+  db = initializeFirestore(fbApp, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+} catch(e) {
+  console.warn('オフラインキャッシュを有効化できませんでした:', e);
+  db = getFirestore(fbApp);
+}
 
 // シフト管理アプリのFirestoreに接続（別アプリとして初期化）
 const shiftApp = initializeApp(shiftFirebaseConfig, 'shift-app');
 const shiftDb = getFirestore(shiftApp);
-
-// オフラインキャッシュを有効化（接続回復後に自動同期）
-enableIndexedDbPersistence(db).catch(e => {
-  if(e.code === 'failed-precondition') console.warn('複数タブ起動中のためオフラインキャッシュ無効');
-  else if(e.code === 'unimplemented') console.warn('このブラウザはオフラインキャッシュ非対応');
-});
 
 let currentUser = null;
 let saveTimer = null;
