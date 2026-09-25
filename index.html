@@ -269,11 +269,20 @@
 <div id="app-body" style="display:none;">
   <div class="fb-user-bar">
     <span class="fb-save-status" id="fb-save-status"></span>
+    <span class="fb-save-status" id="fb-last-saved"></span>
     <span id="fb-user-name"></span>
     <button class="fb-logout-btn" onclick="doSignOut()">ログアウト</button>
   </div>
   <div id="app"></div>
 </div>
+
+<script>
+// Firestore読み込み状態（Reactスクリプトより前に定義）
+window._firestoreData = null;      // Firestoreから読み込んだデータ
+window._firestoreReady = false;    // 読み込み完了フラグ
+window._onFirestoreReady = null;   // Reactからセットされるコールバック
+window._firestoreLoadOk = false;   // Firestoreの読み込みに成功したか（成功前は保存しない）
+</script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -486,12 +495,24 @@ function loadState(key, defaultValue) {
 }
 function saveState(key, value) {
   _localCache[key] = value;
-  if(window._saveToFirestore) window._saveToFirestore(_localCache);
+  if(window._saveToFirestore) {
+    // schedules と salesHistory が両方空の場合は保存しない（初期化直後の上書きを防止）
+    const s = _localCache.schedules;
+    const h = _localCache.salesHistory;
+    const isEmpty = (!s || s.length === 0) && (!h || h.length === 0);
+    if (!isEmpty) {
+      window._saveToFirestore(_localCache);
+    }
+  }
 }
 function _initFromFirestore(data) {
   if(!data) return;
   console.log('Firestore読み込みデータ:', Object.keys(data));
   Object.keys(data).forEach(k => { _localCache[k] = data[k]; });
+  window._firestoreData = data;
+  window._firestoreReady = true;
+  // Reactがすでにマウント済みならコールバックを呼ぶ
+  if(window._onFirestoreReady) window._onFirestoreReady(data);
 }
 
 // ===== メインアプリ =====
@@ -513,6 +534,35 @@ function App() {
   const [minStock, setMinStock] = useState(() => loadState('minStock', 2000));
   const [productMapping, setProductMapping] = useState(() => loadState('productMapping', {})); // csvName -> productId
   const [pendingMappings, setPendingMappings] = useState([]);
+
+  // Firestoreデータが届いたらstateを更新
+  useEffect(() => {
+    function applyFirestoreData(d) {
+      if(!d) return;
+      if(d.products && d.products.length > 0) setProducts(d.products);
+      if(d.stores) {
+        const savedIds = new Set(d.stores.map(s => s.id));
+        const missing = DEFAULT_STORES.filter(s => !savedIds.has(s.id));
+        setStores(missing.length > 0 ? [...d.stores, ...missing] : d.stores);
+      }
+      if(d.salesHistory) setSalesHistory(d.salesHistory);
+      if(d.schedules) setSchedules(d.schedules);
+      if(d.storeInventory) setStoreInventory(d.storeInventory);
+      if(d.warehouseInventory) setWarehouseInventory(d.warehouseInventory);
+      if(d.productMapping) setProductMapping(d.productMapping);
+      if(d.minStock !== undefined) setMinStock(d.minStock);
+      if(d.deliveries) setDeliveries(d.deliveries);
+    }
+
+    // すでに読み込み完了していれば即適用
+    if(window._firestoreReady && window._firestoreData) {
+      applyFirestoreData(window._firestoreData);
+    }
+    // まだなら完了時に適用されるよう登録
+    window._onFirestoreReady = applyFirestoreData;
+
+    return () => { window._onFirestoreReady = null; };
+  }, []); // マウント時1回だけ
 
   // 保存
   useEffect(() => { saveState('products', products); }, [products]);
@@ -3645,28 +3695,76 @@ window.doSignOut = async () => {
   if(confirm('ログアウトしますか？')) await signOut(auth);
 };
 
+// ===== 自動バックアップ（localStorage） =====
+const LAST_SAVED_KEY = 'coffee_lastSavedAt';
+const BACKUP_KEY = 'coffee_backup_latest';
+
+function formatAgo(ts) {
+  const diffMin = Math.floor((Date.now() - ts) / 60000);
+  if(diffMin < 1) return 'たった今';
+  if(diffMin < 60) return diffMin + '分前';
+  const diffH = Math.floor(diffMin / 60);
+  if(diffH < 24) return diffH + '時間前';
+  return Math.floor(diffH / 24) + '日前';
+}
+
+function showLastSaved() {
+  const el = document.getElementById('fb-last-saved');
+  if(!el) return;
+  let ts = null;
+  try { ts = Number(localStorage.getItem(LAST_SAVED_KEY)) || null; } catch(e) {}
+  el.textContent = ts ? '前回保存: ' + formatAgo(ts) : '';
+  el.title = ts ? new Date(ts).toLocaleString('ja-JP') : '';
+}
+
+function recordBackup(cleanData) {
+  const now = Date.now();
+  try { localStorage.setItem(LAST_SAVED_KEY, String(now)); } catch(e) {}
+  try {
+    localStorage.setItem(BACKUP_KEY, JSON.stringify({ savedAt: now, data: cleanData }));
+  } catch(e) {
+    console.warn('ローカルバックアップ保存失敗（容量超過の可能性）:', e);
+  }
+  showLastSaved();
+}
+setInterval(showLastSaved, 60000);
+
+function applyLoadedSnap(snap) {
+  window._firestoreLoadOk = true;
+  if(snap.exists()) {
+    const d = snap.data();
+    if(d && Object.keys(d).length > 0) {
+      _initFromFirestore(d);
+      fbSetStatus('復元完了');
+      setTimeout(()=>fbSetStatus(''), 2000);
+    }
+  }
+}
+
 async function loadFromFirestore() {
   if(!currentUser) return;
+  showLastSaved();
+  const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
+  const getPromise = getDoc(ref);
   try {
-    const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
     // タイムアウト10秒
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('timeout')), 10000)
     );
-    const snap = await Promise.race([getDoc(ref), timeoutPromise]);
-    if(snap.exists()) {
-      const d = snap.data();
-      if(d && Object.keys(d).length > 0) {
-        _initFromFirestore(d);
-        fbSetStatus('復元完了');
-        setTimeout(()=>fbSetStatus(''), 2000);
-      }
-    }
+    const snap = await Promise.race([getPromise, timeoutPromise]);
+    applyLoadedSnap(snap);
   } catch(e) {
     if(e.message === 'timeout') {
-      console.warn('Firestore接続タイムアウト: 空のデータで起動します');
-      fbSetStatus('接続タイムアウト（再読込してください）');
-      setTimeout(()=>fbSetStatus(''), 5000);
+      console.warn('Firestore接続タイムアウト: 読み込み完了まで保存を停止します');
+      fbSetStatus('接続待ち（読み込み完了まで保存停止中）');
+      // 遅れて届いたデータもReactに反映する
+      getPromise.then(snap => {
+        console.log('Firestore読み込み（遅延）完了');
+        applyLoadedSnap(snap);
+      }).catch(err => {
+        console.error('Firestore読み込みエラー:', err);
+        fbSetStatus('読み込み失敗（再読込してください）');
+      });
     } else {
       console.error('Firestore読み込みエラー:', e);
       fbSetStatus('読み込み失敗: ' + e.message);
@@ -3708,6 +3806,11 @@ window._loadShiftFromFirestore = async (month) => {
 
 window._saveToFirestore = async (data) => {
   if(!currentUser) return;
+  // Firestoreの読み込みが成功するまでは保存しない（未読込の空データで上書きするのを防止）
+  if(!window._firestoreLoadOk) {
+    console.warn('Firestore未読込のため保存をスキップ');
+    return;
+  }
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     try {
@@ -3716,6 +3819,7 @@ window._saveToFirestore = async (data) => {
       const cleanData = JSON.parse(JSON.stringify(data, (key, val) => val === undefined ? null : val));
       console.log('Firestore保存データ:', Object.keys(cleanData), '件');
       await setDoc(ref, cleanData);
+      recordBackup(cleanData);
       fbSetStatus('✓ 保存済み');
       setTimeout(()=>fbSetStatus(''), 2000);
     } catch(e) {
@@ -3735,6 +3839,9 @@ onAuthStateChanged(auth, async (user) => {
     await loadFromFirestore();
   } else {
     currentUser = null;
+    window._firestoreLoadOk = false;
+    window._firestoreReady = false;
+    window._firestoreData = null;
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app-body').style.display = 'none';
   }
