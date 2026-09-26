@@ -3650,7 +3650,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-         doc, setDoc, getDoc }
+         doc, setDoc, getDoc, writeBatch }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // 焙煎販売アプリ用Firebaseプロジェクト（データ保存用）
@@ -3747,16 +3747,78 @@ function recordBackup(cleanData) {
 }
 setInterval(showLastSaved, 60000);
 
-// getDocの結果を反映（成功時のみ保存を許可する）
-function applyLoadedSnap(snap) {
-  if(snap.exists()) {
-    const d = snap.data();
-    if(d && Object.keys(d).length > 0) {
-      _initFromFirestore(d); // ← _localCache更新＋React state反映＋保存許可
-      fbSetStatus('復元完了');
-      setTimeout(()=>fbSetStatus(''), 2000);
-      return;
+// ===== salesHistory 分割保存 =====
+// Firestoreの1ドキュメント上限(1MiB)を超えるため、salesHistoryは main から外して
+// coffee_users/{uid}/data/sales_0, sales_1, ... に分割保存する。
+// main には分割数 salesHistoryChunks を保存する。
+const SALES_CHUNK_PREFIX = 'sales_';
+const SALES_CHUNK_MAX_BYTES = 500000; // 1チャンクの目安サイズ（JSONのUTF-8バイト数）
+let _savedSalesRef = null;        // 最後に保存（または読込）したsalesHistory配列（参照比較で変更検知）
+let _savedSalesChunkCount = 0;    // Firestore上に存在するチャンク数
+
+function salesChunkRef(uid, i) {
+  return doc(db, 'coffee_users', uid, 'data', SALES_CHUNK_PREFIX + i);
+}
+
+function splitSalesHistory(sales) {
+  const enc = new TextEncoder();
+  const chunks = [];
+  let cur = [], curBytes = 0;
+  for(const rec of sales) {
+    const b = enc.encode(JSON.stringify(rec)).length + 1;
+    if(cur.length > 0 && curBytes + b > SALES_CHUNK_MAX_BYTES) {
+      chunks.push(cur);
+      cur = []; curBytes = 0;
     }
+    cur.push(rec);
+    curBytes += b;
+  }
+  if(cur.length > 0) chunks.push(cur);
+  return chunks;
+}
+
+// 分割されたsalesHistoryを読み込む（1つでも欠けていたらエラー＝読込失敗扱い）
+async function loadSalesChunks(uid, count) {
+  const snaps = await Promise.all(
+    Array.from({ length: count }, (_, i) => getDoc(salesChunkRef(uid, i)))
+  );
+  const sales = [];
+  snaps.forEach((s, i) => {
+    if(!s.exists()) throw new Error(`salesHistoryチャンク ${SALES_CHUNK_PREFIX}${i} が見つかりません`);
+    const items = s.data().items;
+    if(!Array.isArray(items)) throw new Error(`salesHistoryチャンク ${SALES_CHUNK_PREFIX}${i} が不正です`);
+    sales.push(...items);
+  });
+  return sales;
+}
+
+// main（＋分割salesHistory）を読み込んで1つのデータにまとめる
+async function fetchAllData(uid, mainSnap) {
+  if(!mainSnap.exists()) return null;
+  const d = { ...mainSnap.data() };
+  if(typeof d.salesHistoryChunks === 'number') {
+    const count = d.salesHistoryChunks;
+    d.salesHistory = await loadSalesChunks(uid, count);
+    _savedSalesChunkCount = count;
+    console.log(`[Firestore] salesHistory分割読込: ${count}チャンク / ${d.salesHistory.length}件`);
+  } else {
+    // 旧形式（mainにsalesHistoryを含む）→ 次回保存時に分割形式へ移行
+    _savedSalesChunkCount = 0;
+    console.log('[Firestore] 旧形式（salesHistoryはmain内）: 次回保存で分割形式へ移行します');
+  }
+  delete d.salesHistoryChunks;
+  return d;
+}
+
+// 読込結果を反映（成功時のみ保存を許可する）
+function applyLoadedData(d) {
+  if(d && Object.keys(d).length > 0) {
+    // 旧形式の場合は未分割なので、次回保存で必ずチャンクを書き込む
+    _savedSalesRef = _savedSalesChunkCount > 0 ? (d.salesHistory || null) : null;
+    _initFromFirestore(d); // ← _localCache更新＋React state反映＋保存許可
+    fbSetStatus('復元完了');
+    setTimeout(()=>fbSetStatus(''), 2000);
+    return;
   }
   // ドキュメントが存在しない／空の場合は新規ユーザーとして保存を許可
   _firestoreLoaded = true;
@@ -3812,10 +3874,12 @@ async function loadFromFirestore() {
       console.log(`[Firestore] getDoc完了 ${elapsed()}（${attempt}回目, fromCache=${snap.metadata.fromCache}, exists=${snap.exists()}）`);
       // キャッシュから「存在しない」と返った場合はサーバー未確認なので再試行
       if(!snap.exists() && snap.metadata.fromCache) throw new Error('cache-miss');
+      // 分割保存されたsalesHistoryも読み込む（欠けていれば例外→再試行）
+      const data = await fetchAllData(user.uid, snap);
       if(currentUser !== user) { clearTimeout(timeoutId); return; }
       loaded = true;
       clearTimeout(timeoutId);
-      applyLoadedSnap(snap);
+      applyLoadedData(data);
       console.log(`[Firestore] _initFromFirestore完了 ${elapsed()} / マウント済み=${mounted} / コールバック登録=${!!_onFirestoreLoad}`);
       showConnecting('');
       mountOnce('loaded');
@@ -3869,12 +3933,43 @@ window._saveToFirestore = async (data) => {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     try {
-      const ref = doc(db, 'coffee_users', currentUser.uid, 'data', 'main');
+      const uid = currentUser.uid;
+      const ref = doc(db, 'coffee_users', uid, 'data', 'main');
+      const salesRef = data.salesHistory; // 変更検知用（この時点の配列参照）
       // undefinedの値を除去してからFirestoreに保存
       const cleanData = JSON.parse(JSON.stringify(data, (key, val) => val === undefined ? null : val));
       console.log('Firestore保存データ:', Object.keys(cleanData), '件');
       console.log('[Firestore] 保存件数:', _dataSummary(cleanData));
-      await setDoc(ref, cleanData);
+
+      // salesHistoryはmainから外して分割ドキュメントへ
+      const sales = Array.isArray(cleanData.salesHistory) ? cleanData.salesHistory : [];
+      const mainData = { ...cleanData };
+      delete mainData.salesHistory;
+
+      const batch = writeBatch(db);
+      const salesChanged = salesRef !== _savedSalesRef;
+      let chunkCount = _savedSalesChunkCount;
+      if(salesChanged) {
+        const chunks = splitSalesHistory(sales);
+        chunkCount = chunks.length;
+        chunks.forEach((items, i) => {
+          batch.set(salesChunkRef(uid, i), { items, index: i, total: chunkCount, updatedAt: Date.now() });
+        });
+        // 以前より分割数が減った場合、余ったチャンクを削除
+        for(let i = chunkCount; i < _savedSalesChunkCount; i++) batch.delete(salesChunkRef(uid, i));
+        console.log(`[Firestore] salesHistory分割保存: ${sales.length}件 → ${chunkCount}チャンク`);
+      }
+      mainData.salesHistoryChunks = chunkCount;
+      const mainBytes = new TextEncoder().encode(JSON.stringify(mainData)).length;
+      console.log(`[Firestore] mainサイズ目安: ${(mainBytes / 1024).toFixed(0)}KB`);
+      if(mainBytes > 900000) console.warn('[Firestore] mainドキュメントが上限(1MiB)に近づいています');
+      batch.set(ref, mainData);
+
+      await batch.commit(); // main と分割チャンクを一括（アトミック）で保存
+      if(salesChanged) {
+        _savedSalesRef = salesRef;
+        _savedSalesChunkCount = chunkCount;
+      }
       recordBackup(cleanData);
       fbSetStatus('✓ 保存済み');
       setTimeout(()=>fbSetStatus(''), 2000);
@@ -3896,6 +3991,8 @@ onAuthStateChanged(auth, async (user) => {
   } else {
     currentUser = null;
     _firestoreLoaded = false; // ログアウト時にリセット
+    _savedSalesRef = null;
+    _savedSalesChunkCount = 0;
     showConnecting('');
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app-body').style.display = 'none';
